@@ -148,6 +148,13 @@ class TestDocs2Static(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(gc_dir, "index.html")))
         self.assertTrue(os.path.exists(os.path.join(gc_dir, "index.md")))
         
+        # Vérification du frontmatter dans le markdown du petit-enfant
+        with open(os.path.join(gc_dir, "index.md"), "r", encoding="utf-8") as f:
+            md_content = f.read()
+            self.assertTrue(md_content.startswith("---"))
+            self.assertIn("edit_url: https://notes.liiib.re/docs/0b4c67c5-f62f-45cc-80fd-a290cb04b384/", md_content)
+            self.assertIn("category: sous sous partie 1", md_content)
+        
         # Vérification d'un fichier metadata.json réel
         with open(os.path.join(gc_dir, "metadata.json"), "r") as f:
             meta = json.load(f)
@@ -176,9 +183,17 @@ class TestDocs2Static(unittest.TestCase):
             toml_content = f.read()
             self.assertIn('site_name = "ZenDocs : Parent"', toml_content)
             self.assertIn('docs_dir = "source/zendocs-parent"', toml_content)
+            self.assertIn(f'repo_url = "{self.base_url}/docs/{self.doc_id}/"', toml_content)
             self.assertIn('copyright = """\nCopyright &copy; 2026 Coopérative Code Commun - CC-BY-SA\n"""', toml_content)
             self.assertIn('logo = "9a08b49e-498f-49c9-a3ac-dcf1c9c59292.png"', toml_content)
             self.assertIn('"navigation.tabs"', toml_content)
+            self.assertIn('"content.action.edit"', toml_content)
+            self.assertIn('"content.action.view"', toml_content)
+            self.assertNotIn('#"content.action.edit"', toml_content)
+            self.assertNotIn('#"content.action.view"', toml_content)
+            self.assertIn('edit = "material/pencil"', toml_content)
+            self.assertIn('view = "material/eye"', toml_content)
+            self.assertIn('repo = "fontawesome/solid/file-pen"', toml_content)
             self.assertNotIn('#"navigation.tabs"', toml_content)
             self.assertIn('#"navigation.sections"', toml_content)
             # On vérifie que la version non commentée n'est plus là, 
@@ -221,22 +236,32 @@ class TestDocs2Static(unittest.TestCase):
         from zensical_backend import ensure_ssh_url
         
         # Cas HTTPS GitHub
-        https_url = "https://github.com/User/Repo"
-        self.assertEqual(ensure_ssh_url(https_url), "git@github.com:User/Repo.git")
+        self.assertEqual(ensure_ssh_url("https://github.com/User/Repo"), "git@github.com:User/Repo.git")
         
-        # Cas HTTPS GitHub avec .git
-        https_url_git = "https://github.com/User/Repo.git"
-        self.assertEqual(ensure_ssh_url(https_url_git), "git@github.com:User/Repo.git")
+        # Cas HTTPS GitLab
+        self.assertEqual(ensure_ssh_url("https://gitlab.com/User/Repo"), "git@gitlab.com:User/Repo.git")
         
         # Cas déjà SSH
-        ssh_url = "git@github.com:User/Repo.git"
-        self.assertEqual(ensure_ssh_url(ssh_url), ssh_url)
-        
-        # Cas autre URL (pas touché)
-        other_url = "https://gitlab.com/User/Repo"
-        self.assertEqual(ensure_ssh_url(other_url), other_url)
+        self.assertEqual(ensure_ssh_url("git@gitlab.com:User/Repo.git"), "git@gitlab.com:User/Repo.git")
         
         logger.info("SUCCÈS: test_ensure_ssh_url")
+
+    def test_get_pages_url(self):
+        """Vérifie le calcul des URLs de pages (GitHub/GitLab)."""
+        logger.info("Test: get_pages_url")
+        from zensical_backend import get_pages_url
+        
+        # GitHub SSH
+        self.assertEqual(get_pages_url("git@github.com:User/Repo.git"), "https://User.github.io/Repo/")
+        # GitHub HTTPS
+        self.assertEqual(get_pages_url("https://github.com/User/Repo"), "https://User.github.io/Repo/")
+        
+        # GitLab SSH
+        self.assertEqual(get_pages_url("git@gitlab.com:User/Repo.git"), "https://User.gitlab.io/Repo/")
+        # GitLab HTTPS
+        self.assertEqual(get_pages_url("https://gitlab.com/User/Repo"), "https://User.gitlab.io/Repo/")
+        
+        logger.info("SUCCÈS: test_get_pages_url")
 
     def test_deploy_skips_download(self):
         """Vérifie que l'option --deploy court-circuite le téléchargement dans main.py."""
@@ -273,13 +298,13 @@ class TestDocs2Static(unittest.TestCase):
             self.test_zensical_build()
             
         try:
-            # On utilise le repo de test du .env / Use test repo from .env
-            github_repo = os.getenv("TEST_GITHUB_REPO")
-            main.deploy_zensical(self.test_dir, github_repo)
+            # On utilise le repo de test du .env / Use test repo from .env (GitHub ou GitLab)
+            repo_url = os.getenv("TEST_GITHUB_REPO") or os.getenv("TEST_GITLAB_REPO")
+            main.deploy_zensical(self.test_dir, repo_url)
             
-            # Vérifie que l'URL GitHub Pages est affichée (via get_github_pages_url)
-            from zensical_backend import get_github_pages_url
-            pages_url = get_github_pages_url(github_repo)
+            # Vérifie que l'URL Pages est affichée (via get_pages_url)
+            from zensical_backend import get_pages_url
+            pages_url = get_pages_url(repo_url)
             logger.info(f"Test de déploiement réussi : {pages_url}")
             
             logger.info("SUCCÈS: test_zensical_deploy")

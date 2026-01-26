@@ -26,7 +26,7 @@ def slugify(text: str) -> str:
     text = re.sub(r'[-\s]+', '-', text)
     return text
 
-def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str):
+def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, root_docs_url: str = None):
     """
     Configure Zensical pour le dossier donné.
     Configures Zensical for the given directory.
@@ -77,6 +77,13 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str):
             site_author = metadata.get("site_author") or metadata.get("auteur·ice") or metadata.get("author") or "Docs2Static"
             toml_content = re.sub(r'site_author\s*=\s*".*?"', f'site_author = "{site_author}"', toml_content)
             
+            # repo_url (URL originale de DOCS)
+            if root_docs_url:
+                if re.search(r'repo_url\s*=', toml_content):
+                    toml_content = re.sub(r'repo_url\s*=\s*".*?"', f'repo_url = "{root_docs_url}"', toml_content)
+                else:
+                    toml_content = toml_content.replace('[project]', f'[project]\nrepo_url = "{root_docs_url}"')
+
             # copyright
             license_val = metadata.get("licence") or metadata.get("license")
             author_val = metadata.get("auteur·ice") or metadata.get("author") or "The authors"
@@ -134,10 +141,41 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str):
                         # Create the features line under [project.theme]
                         toml_content = toml_content.replace('[project.theme]', '[project.theme]\nfeatures = ["navigation.tabs"]')
 
+                # Ajoute les boutons d'action (Edit et View)
+                # Add action buttons (Edit and View)
+                for feature in ["content.action.edit", "content.action.view"]:
+                    # Si c'est commenté, on le décommente / If commented, uncomment it
+                    pattern_commented = rf'#\s*"{re.escape(feature)}"'
+                    if re.search(pattern_commented, toml_content):
+                        toml_content = re.sub(pattern_commented, f'"{feature}"', toml_content)
+                    elif f'"{feature}"' not in toml_content:
+                        # Si absent, on l'ajoute / If missing, add it
+                        if re.search(r'features\s*=\s*\[', toml_content):
+                            toml_content = re.sub(r'features\s*=\s*\[', f'features = ["{feature}", ', toml_content)
+
                 # On s'assure que navigation.sections est commenté
                 # Ensure navigation.sections is commented out
                 if '"navigation.sections"' in toml_content and '#"navigation.sections"' not in toml_content:
                     toml_content = toml_content.replace('"navigation.sections"', '#"navigation.sections"')
+
+                # Ajoute/Met à jour les icônes d'action (pencil pour edit, eye pour view, file-pen pour repo)
+                # Add/Update action icons (pencil for edit, eye for view, file-pen for repo)
+                icon_section = '[project.theme.icon]'
+                if f'#{icon_section}' in toml_content:
+                    toml_content = toml_content.replace(f'#{icon_section}', icon_section)
+                
+                if icon_section not in toml_content:
+                    # On l'ajoute avant la fin du fichier ou après [project.theme]
+                    toml_content = toml_content.replace('[project.theme]', f'[project.theme]\n{icon_section}')
+                
+                for icon_key, icon_val in [("edit", "material/pencil"), ("view", "material/eye"), ("repo", "fontawesome/solid/file-pen")]:
+                    pattern = rf'^#?{icon_key}\s*=\s*".*?"'
+                    replacement = f'{icon_key} = "{icon_val}"'
+                    if re.search(pattern, toml_content, re.MULTILINE):
+                        toml_content = re.sub(pattern, replacement, toml_content, flags=re.MULTILINE)
+                    else:
+                        # On l'insère juste après la section [project.theme.icon]
+                        toml_content = toml_content.replace(icon_section, f'{icon_section}\n{replacement}')
 
             with open(zensical_toml, "w", encoding="utf-8") as f:
                 f.write(toml_content)
@@ -145,95 +183,109 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str):
     except Exception as e:
         logger.error(f"Erreur lors de la mise à jour de zensical.toml : {e}")
 
-def get_github_pages_url(github_repo: str) -> str:
+def get_pages_url(repo_url: str) -> str:
     """
-    Calcule l'URL de la page GitHub Pages à partir de l'URL du dépôt.
-    Calculates the GitHub Pages URL from the repository URL.
+    Calcule l'URL de la page (GitHub ou GitLab Pages) à partir de l'URL du dépôt.
+    Calculates the Pages URL (GitHub or GitLab) from the repository URL.
     """
-    if not github_repo:
+    if not repo_url:
         return ""
     
-    # On gère le format SSH : git@github.com:User/Repo.git
-    # Handle SSH format
-    ssh_match = re.search(r'git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$', github_repo)
-    if ssh_match:
-        user, repo = ssh_match.groups()
+    # GitHub
+    # Format SSH : git@github.com:User/Repo.git
+    ssh_github = re.search(r'git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$', repo_url)
+    if ssh_github:
+        user, repo = ssh_github.groups()
         return f"https://{user}.github.io/{repo}/"
     
-    # On gère le format HTTPS : https://github.com/User/Repo
-    # Handle HTTPS format
-    https_match = re.search(r'https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?$', github_repo)
-    if https_match:
-        user, repo = https_match.groups()
+    # Format HTTPS : https://github.com/User/Repo
+    https_github = re.search(r'https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?$', repo_url)
+    if https_github:
+        user, repo = https_github.groups()
         return f"https://{user}.github.io/{repo}/"
+
+    # GitLab
+    # Format SSH : git@gitlab.com:User/Repo.git
+    ssh_gitlab = re.search(r'git@gitlab\.com:([^/]+)/([^/]+?)(?:\.git)?$', repo_url)
+    if ssh_gitlab:
+        user, repo = ssh_gitlab.groups()
+        return f"https://{user}.gitlab.io/{repo}/"
+    
+    # Format HTTPS : https://gitlab.com/User/Repo
+    https_gitlab = re.search(r'https?://gitlab\.com/([^/]+)/([^/]+?)(?:\.git)?$', repo_url)
+    if https_gitlab:
+        user, repo = https_gitlab.groups()
+        return f"https://{user}.gitlab.io/{repo}/"
         
-    return github_repo
+    return repo_url
 
 def ensure_ssh_url(url: str) -> str:
     """
-    Convertit une URL GitHub HTTPS en URL SSH si nécessaire pour éviter les demandes de mot de passe.
-    Converts a GitHub HTTPS URL to an SSH URL if necessary to avoid password prompts.
+    Convertit une URL (GitHub ou GitLab) HTTPS en URL SSH si nécessaire.
+    Converts a (GitHub or GitLab) HTTPS URL to an SSH URL if necessary.
     """
     if not url:
         return url
     
-    # Si c'est déjà du SSH (commence par git@ ou contient un format ssh)
-    # If it's already SSH
+    # Si c'est déjà du SSH
     if url.startswith("git@") or "ssh://" in url:
         return url
         
-    # Si c'est du HTTPS GitHub, on le transforme / If it's HTTPS GitHub, transform it
-    # Exemple : https://github.com/User/Repo.git -> git@github.com:User/Repo.git
-    match = re.search(r'https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?$', url)
-    if match:
-        user, repo = match.groups()
-        ssh_url = f"git@github.com:{user}/{repo}.git"
-        logger.info(f"Conversion de l'URL HTTPS en SSH pour le déploiement : {ssh_url}")
-        return ssh_url
+    # GitHub
+    gh_match = re.search(r'https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?$', url)
+    if gh_match:
+        user, repo = gh_match.groups()
+        return f"git@github.com:{user}/{repo}.git"
+
+    # GitLab
+    gl_match = re.search(r'https?://gitlab\.com/([^/]+)/([^/]+?)(?:\.git)?$', url)
+    if gl_match:
+        user, repo = gl_match.groups()
+        return f"git@gitlab.com:{user}/{repo}.git"
         
     return url
 
-def deploy_zensical(base_dir: str, github_repo: str):
+def deploy_zensical(base_dir: str, repo_url: str):
     """
-    Lance le build de Zensical et déploie sur GitHub Pages via SSH.
-    Starts the Zensical build and deploys to GitHub Pages via SSH.
+    Lance le build de Zensical et déploie sur GitHub/GitLab Pages via SSH.
+    Starts the Zensical build and deploys to GitHub/GitLab Pages via SSH.
     """
-    if not github_repo:
-        logger.error("Aucun dépôt GitHub spécifié pour le déploiement. Vérifiez GITHUB_REPO dans .env")
-        # No GitHub repository specified for deployment. Check GITHUB_REPO in .env
+    if not repo_url:
+        logger.error("Aucun dépôt spécifié pour le déploiement. Vérifiez GITHUB_REPO ou GITLAB_REPO dans .env")
         return
 
-    # S'assure que l'URL est au format SSH pour éviter les prompts interactifs
-    # Ensures the URL is in SSH format to avoid interactive prompts
-    github_repo = ensure_ssh_url(github_repo)
+    # Détection de la plateforme / Platform detection
+    is_gitlab = "gitlab.com" in repo_url.lower()
+    platform = "GitLab" if is_gitlab else "GitHub"
+    # Pour GitLab, on utilise souvent 'pages' ou la même branche que GitHub 'gh-pages'
+    # Par simplicité on va utiliser 'gh-pages' par défaut pour les deux, 
+    # ou 'pages' pour GitLab si c'est la convention
+    branch = "gh-pages"
+    if is_gitlab:
+        branch = "gl-pages" # Convention suggérée pour différencier
 
-    # 1. Construction du site / Site build
-    logger.info("Lancement du build Zensical...")
+    # S'assure que l'URL est au format SSH
+    repo_url = ensure_ssh_url(repo_url)
+
+    # 1. Construction du site
+    logger.info(f"Lancement du build Zensical pour {platform}...")
     try:
-        # On lance 'zensical build' dans le dossier du contenu
-        # Runs 'zensical build' in the content directory
         subprocess.run(["uv", "run", "zensical", "build"], cwd=base_dir, check=True)
         logger.info("Build Zensical terminé avec succès.")
     except Exception as e:
         logger.error(f"Erreur lors du build Zensical : {e}")
         return
 
-    # 2. Déploiement vers GitHub Pages / Deployment to GitHub Pages
+    # 2. Déploiement
     site_dir = os.path.join(base_dir, "site")
     if not os.path.exists(site_dir):
         logger.error(f"Dossier de build non trouvé : {site_dir}")
         return
 
-    logger.info(f"Préparation du déploiement vers : {github_repo}")
+    logger.info(f"Préparation du déploiement vers {platform} : {repo_url}")
     try:
-        # On initialise un dépôt git temporaire dans le dossier 'site'
-        # Initializes a temporary git repo in the 'site' folder
         subprocess.run(["git", "init"], cwd=site_dir, check=True, capture_output=True)
         
-        # On essaie d'utiliser la configuration globale de l'utilisateur
-        # Try to use the global user configuration
-        # Si non définie, on met une valeur par défaut pour éviter que le commit échoue
-        # If not defined, set a default value to prevent commit failure
         try:
             subprocess.run(["git", "config", "user.name"], check=True, capture_output=True)
         except subprocess.CalledProcessError:
@@ -245,19 +297,19 @@ def deploy_zensical(base_dir: str, github_repo: str):
             subprocess.run(["git", "config", "user.email", "bot@docs2static.local"], cwd=site_dir, check=True, capture_output=True)
 
         subprocess.run(["git", "add", "."], cwd=site_dir, check=True, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "Déploiement automatique via Docs2Static"], cwd=site_dir, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", f"Déploiement automatique {platform} via Docs2Static"], cwd=site_dir, check=True, capture_output=True)
         
-        # On pousse de force vers la branche gh-pages du dépôt distant
-        # Force push to the gh-pages branch of the remote repository
-        logger.info("Envoi des fichiers vers GitHub (branche gh-pages)...")
-        subprocess.run(["git", "push", "--force", github_repo, "HEAD:gh-pages"], cwd=site_dir, check=True, capture_output=True)
+        logger.info(f"Envoi des fichiers vers {platform} (branche {branch})...")
+        subprocess.run(["git", "push", "--force", repo_url, f"HEAD:{branch}"], cwd=site_dir, check=True, capture_output=True)
         
-        logger.info("Déploiement sur GitHub Pages réussi !")
+        logger.info(f"Déploiement sur {platform} Pages réussi !")
         
-        # Affiche l'adresse de la page déployée / Show the deployed page URL
-        pages_url = get_github_pages_url(github_repo)
+        # Affiche l'adresse de la page déployée
+        pages_url = get_pages_url(repo_url)
         if pages_url:
             logger.info(f"Votre site est disponible à l'adresse : {pages_url}")
+            if is_gitlab:
+                logger.info(f"Note: Pour GitLab, assurez-vous d'avoir un fichier .gitlab-ci.yml configuré pour servir la branche {branch}.")
     except subprocess.CalledProcessError as e:
         logger.error(f"Erreur lors de l'exécution d'une commande Git : {e.stderr.decode() if e.stderr else e}")
     except Exception as e:

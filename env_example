@@ -6,6 +6,10 @@ DOCS_URL=
 # GitHub repository for upload (SSH format recommended)
 GITHUB_REPO=
 
+# Dépôt GitLab pour l'upload (alternative)
+# GitLab repository for upload (alternative)
+# GITLAB_REPO=
+
 # Moteur de site statique par défaut (ex: zensical)
 # Default static site generator (e.g., zensical)
 BACKEND=

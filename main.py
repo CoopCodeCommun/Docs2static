@@ -463,8 +463,22 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # Save the files if they were downloaded
         if clean_html:
             save_file(os.path.join(doc_dir, "index.html"), clean_html)
+        
         if clean_md:
-            save_file(os.path.join(doc_dir, "index.md"), clean_md)
+            # Ajout de l'URL d'édition aux métadonnées pour Zensical
+            # Add the edit URL to metadata for Zensical
+            final_frontmatter["edit_url"] = f"{base_url}/docs/{doc_id}/"
+            
+            # Reconstruit le bloc frontmatter en Markdown pour index.md
+            # Rebuild the Markdown frontmatter block for index.md
+            md_with_fm = "---\n"
+            for key, value in final_frontmatter.items():
+                # On évite de mettre des objets complexes si il y en a
+                if isinstance(value, (str, int, float)):
+                    md_with_fm += f"{key}: {value}\n"
+            md_with_fm += "---\n\n" + clean_md
+            
+            save_file(os.path.join(doc_dir, "index.md"), md_with_fm)
         
         # 4.5 Configuration du backend si c'est le premier document
         # Backend configuration if it's the first document
@@ -473,7 +487,9 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             # Go up one level from 'source'
             base_content_dir = os.path.dirname(parent_output_dir)
             if backend.lower() == "zensical":
-                setup_zensical_backend(base_content_dir, final_frontmatter, title)
+                # L'URL racine est l'URL du premier document
+                root_docs_url = f"{base_url}/docs/{doc_id}/"
+                setup_zensical_backend(base_content_dir, final_frontmatter, title, root_docs_url=root_docs_url)
 
         # 4.6 Nettoyage et sauvegarde des métadonnées
         # Metadata cleanup and saving
@@ -484,9 +500,9 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # Ajoute l'ordre d'apparition / Add appearance order
         final_frontmatter["order"] = order
         
-        # On retire les champs temporaires ou inutiles pour le stockage final
-        # Remove temporary or unnecessary fields for final storage
-        for field in ["path", "logo_file"]:
+        # On retire les champs temporaires ou inutiles pour le stockage final dans metadata.json
+        # Remove temporary or unnecessary fields for final storage in metadata.json
+        for field in ["path", "logo_file", "edit_url"]:
             if field in final_frontmatter:
                 del final_frontmatter[field]
 
@@ -633,10 +649,10 @@ def main():
     # Si l'option deploy est activée / If deploy option is enabled
     if args.deploy:
         if args.backend == "zensical":
-            # On récupère l'adresse du dépôt depuis le .env
-            # Get the repo address from .env
-            github_repo = os.getenv("GITHUB_REPO")
-            deploy_zensical("content", github_repo)
+            # On récupère l'adresse du dépôt depuis le .env (GitHub ou GitLab)
+            # Get the repo address from .env (GitHub or GitLab)
+            repo_url = os.getenv("GITHUB_REPO") or os.getenv("GITLAB_REPO")
+            deploy_zensical("content", repo_url)
         else:
             logger.warning("Le déploiement n'est pas encore supporté pour ce backend.")
             # Deployment is not yet supported for this backend.
