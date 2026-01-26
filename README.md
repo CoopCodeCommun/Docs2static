@@ -9,7 +9,8 @@
 
 ## Exemple :
 
-DOCS : https://notes.liiib.re/docs/fa5583b2-37fc-4016-998f-f5237fd41642/
+DOCS : https://notes.liiib.re/docs/fa5583b2-37fc-4016-998f-f5237fd41642/  
+
 STATIC SITE : https://nasjoe.github.io/zendocs_test/
 
 ## Idées / sources 
