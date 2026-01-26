@@ -1,0 +1,18 @@
+# URL du document Docs à récupérer
+# URL of the Docs document to fetch
+DOCS_URL=
+
+# Dépôt GitHub pour l'upload (format SSH recommandé)
+# GitHub repository for upload (SSH format recommended)
+GITHUB_REPO=
+
+# Moteur de site statique par défaut (ex: zensical)
+# Default static site generator (e.g., zensical)
+BACKEND=
+
+
+### POUR LES TESTS
+
+TEST_DOCS_URL=https://notes.liiib.re/docs/fa5583b2-37fc-4016-998f-f5237fd41642/
+TEST_GITHUB_REPO=git@github.com:Nasjoe/zendocs_test.git
+TEST_BACKEND=zensical

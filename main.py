@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+from dotenv import load_dotenv
 import requests_cache
 import http.cookiejar
 import json
@@ -11,6 +12,9 @@ import time
 import logging
 import colorlog
 from typing import Dict, Any, List, Tuple
+
+# Import des backends / Backend imports
+from zensical_backend import setup_zensical_backend, deploy_zensical, slugify
 
 def setup_logger():
     """
@@ -41,6 +45,9 @@ def setup_logger():
 
 # Initialisation du logger / Logger initialization
 logger = setup_logger()
+
+# Chargement des variables d'environnement / Loading environment variables
+load_dotenv()
 
 # Utilisation d'une session avec cache pour éviter de surcharger le serveur
 # On garde les résultats pendant 24 heures par défaut
@@ -87,21 +94,6 @@ def get_docs_api_url(base_url: str, path: str) -> str:
     """
     return f"{base_url}/api/v1.0{path}"
 
-def slugify(text: str) -> str:
-    """
-    Transforme un titre en nom de dossier simple et propre.
-    Turns a title into a simple and clean folder name.
-    """
-    if not text:
-        return "sans-titre"
-    
-    # Enlève les accents / Remove accents
-    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8')
-    # Garde seulement les lettres, les chiffres et les espaces / Keep only letters, numbers, and spaces
-    text = re.sub(r'[^\w\s-]', '', text).strip().lower()
-    # Remplace les espaces par des tirets / Replace spaces with dashes
-    text = re.sub(r'[-\s]+', '-', text)
-    return text
 
 def fetch_document_content(base_url: str, doc_id: str, content_format: str = "html") -> Dict[str, Any]:
     """
@@ -244,11 +236,127 @@ def save_file(file_path: str, content: str):
         f.write(content)
     logger.info(f"Fichier enregistré : {file_path}")
 
-def process_document(base_url: str, doc_id: str, parent_output_dir: str = "content", processed_ids: set = None, selected_format: str = "both", children_list: List[Dict[str, Any]] = None):
+def download_and_replace_images(content: str, doc_dir: str, content_type: str = "markdown") -> Tuple[str, str]:
+    """
+    Cherche les images, les télécharge et remplace les URLs par le fichier local.
+    Retourne le contenu modifié et éventuellement le nom du fichier logo trouvé.
+    Searches for images, downloads them, and replaces URLs with the local file.
+    Returns the modified content and optionally the logo filename found.
+    """
+    if not content:
+        return content, None
+
+    logo_filename = None
+
+    # On cherche les images Markdown : ![alt](url)
+    # Search for Markdown images
+    if content_type == "markdown":
+        # Regex pour trouver ![texte](url)
+        # On tente aussi de capturer une légende "logo" sur la ligne suivante
+        # Try to capture a "logo" legend on the next line
+        pattern = r'!\[(.*?)\]\((https?://.*?)\)'
+        
+        def md_replacer(match):
+            nonlocal logo_filename
+            alt, url = match.groups()
+            try:
+                # Extrait le nom du fichier / Extract filename
+                filename = os.path.basename(urllib.parse.urlparse(url).path)
+                if not filename: return match.group(0)
+                
+                local_path = os.path.join(doc_dir, filename)
+                os.makedirs(doc_dir, exist_ok=True)
+                
+                # Téléchargement via la session avec cache
+                # Download via cached session
+                img_res = session.get(url)
+                if img_res.status_code == 200:
+                    with open(local_path, "wb") as f:
+                        f.write(img_res.content)
+                    source = "CACHE" if img_res.from_cache else "RÉSEAU"
+                    logger.info(f"[{source}] Image localisée : {filename}")
+                    
+                    # Si l'alt est "logo", on le mémorise
+                    # If alt is "logo", remember it
+                    if alt.lower() == "logo":
+                        logo_filename = filename
+                        
+                    return f"![{alt}]({filename})"
+                return match.group(0)
+            except Exception as e:
+                logger.error(f"Erreur image Markdown {url} : {e}")
+                return match.group(0)
+        
+        new_content = re.sub(pattern, md_replacer, content)
+        
+        # Cas spécial Docs : la légende est parfois sur la ligne suivante
+        # Special Docs case: legend is sometimes on the next line
+        # On cherche !\[.*?\]\((.*?)\)\nlogo
+        if not logo_filename:
+            match_logo = re.search(r'!\[.*?\]\((.*?)\)\s*\n\s*logo', new_content, re.IGNORECASE)
+            if match_logo:
+                logo_filename = match_logo.group(1)
+
+        return new_content, logo_filename
+
+    # On cherche les images HTML : <img src="url">
+    # Search for HTML images
+    else:
+        # Regex pour trouver <img ... src="url" ...>
+        pattern = r'<img\s+([^>]*?)src="(https?://.*?)"([^>]*?)>'
+        
+        # On cherche aussi les figures avec légendes / Also search for figures with captions
+        # <figure ... data-caption="logo"><img ... src="url">
+        
+        def html_replacer(match):
+            nonlocal logo_filename
+            before, url, after = match.groups()
+            try:
+                filename = os.path.basename(urllib.parse.urlparse(url).path)
+                if not filename: return match.group(0)
+                
+                local_path = os.path.join(doc_dir, filename)
+                os.makedirs(doc_dir, exist_ok=True)
+                
+                img_res = session.get(url)
+                if img_res.status_code == 200:
+                    with open(local_path, "wb") as f:
+                        f.write(img_res.content)
+                    source = "CACHE" if img_res.from_cache else "RÉSEAU"
+                    logger.info(f"[{source}] Image localisée : {filename}")
+                    
+                    # Vérifie si c'est un logo / Check if it's a logo
+                    if 'alt="logo"' in before.lower() or 'alt="logo"' in after.lower() or \
+                       'data-caption="logo"' in before.lower() or 'data-caption="logo"' in after.lower():
+                        logo_filename = filename
+
+                    return f'<img {before}src="{filename}"{after}>'
+                return match.group(0)
+            except Exception as e:
+                logger.error(f"Erreur image HTML {url} : {e}")
+                return match.group(0)
+                
+        new_content = re.sub(pattern, html_replacer, content)
+        
+        # Vérification supplémentaire pour figcaption
+        if not logo_filename:
+            # <figure ...><img src="filename">...<figcaption>logo</figcaption></figure>
+            match_fig = re.search(r'<img\s+[^>]*?src="([^"]+)"[^>]*?>.*?<figcaption>logo</figcaption>', new_content, re.IGNORECASE | re.DOTALL)
+            if match_fig:
+                logo_filename = match_fig.group(1)
+
+        return new_content, logo_filename
+
+def process_document(base_url: str, doc_id: str, parent_output_dir: str = "content/source", processed_ids: set = None, selected_format: str = "both", children_list: List[Dict[str, Any]] = None, backend: str = None, order: int = 0):
     """
     Traite un document et tous ses enfants de façon organisée.
     Processes a document and all its children in an organized way.
     """
+    # Si le backend est zensical, on force le format markdown uniquement
+    # If the backend is zensical, we force markdown format only
+    if backend == "zensical" and selected_format != "markdown":
+        selected_format = "markdown"
+
     # Initialise la liste des documents déjà faits / Initialize the list of done documents
     if processed_ids is None:
         processed_ids = set()
@@ -314,14 +422,41 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # Utilise le titre pour nommer le dossier / Use the title to name the folder
         folder_name = slugify(title)
         
-        # Si le document a un chemin spécifique dans ses réglages, on peut l'utiliser
-        # If the document has a specific path in its settings, we can use it
-        if "path" in final_frontmatter:
-             folder_name = final_frontmatter["path"]
-             
         # Chemin complet vers le dossier du document / Full path to the document folder
         doc_dir = os.path.join(parent_output_dir, folder_name)
         
+        # 3.5 Traitement des images / Image processing
+        logo_filename = None
+        if clean_html:
+            clean_html, html_logo = download_and_replace_images(clean_html, doc_dir, "html")
+            logo_filename = logo_filename or html_logo
+        if clean_md:
+            clean_md, md_logo = download_and_replace_images(clean_md, doc_dir, "markdown")
+            logo_filename = logo_filename or md_logo
+        
+        # Si un logo a été trouvé, on l'ajoute aux métadonnées temporairement pour le backend
+        # If a logo was found, add it to metadata temporarily for the backend
+        if logo_filename:
+            final_frontmatter["logo_file"] = logo_filename
+        
+        # Si une image est dans les métadonnées, on la localise aussi
+        # If an image is in metadata, localize it too
+        if "image" in final_frontmatter and final_frontmatter["image"].startswith("http"):
+            url = final_frontmatter["image"]
+            try:
+                img_filename = os.path.basename(urllib.parse.urlparse(url).path)
+                if img_filename:
+                    img_local_path = os.path.join(doc_dir, img_filename)
+                    os.makedirs(doc_dir, exist_ok=True)
+                    img_res = session.get(url)
+                    if img_res.status_code == 200:
+                        with open(img_local_path, "wb") as f:
+                            f.write(img_res.content)
+                        final_frontmatter["image"] = img_filename
+                        logger.info(f"Image de couverture localisée : {img_filename}")
+            except Exception as e:
+                logger.error(f"Erreur image metadata {url} : {e}")
+
         logger.info(f"Traitement du document : {title} ({doc_id}) -> {doc_dir}")
 
         # 4. Enregistre les fichiers si ils ont été téléchargés
@@ -331,10 +466,34 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         if clean_md:
             save_file(os.path.join(doc_dir, "index.md"), clean_md)
         
+        # 4.5 Configuration du backend si c'est le premier document
+        # Backend configuration if it's the first document
+        if len(processed_ids) == 1 and backend:
+            # On remonte d'un cran par rapport à 'source'
+            # Go up one level from 'source'
+            base_content_dir = os.path.dirname(parent_output_dir)
+            if backend.lower() == "zensical":
+                setup_zensical_backend(base_content_dir, final_frontmatter, title)
+
+        # 4.6 Nettoyage et sauvegarde des métadonnées
+        # Metadata cleanup and saving
+        
+        # Ajoute le titre officiel aux métadonnées / Add official title to metadata
+        final_frontmatter["title"] = title
+        
+        # Ajoute l'ordre d'apparition / Add appearance order
+        final_frontmatter["order"] = order
+        
+        # On retire les champs temporaires ou inutiles pour le stockage final
+        # Remove temporary or unnecessary fields for final storage
+        for field in ["path", "logo_file"]:
+            if field in final_frontmatter:
+                del final_frontmatter[field]
+
         # Enregistre toujours les métadonnées / Always save metadata
         save_file(os.path.join(doc_dir, "metadata.json"), 
                   json.dumps(final_frontmatter, indent=2, ensure_ascii=False))
-        
+
         time.sleep(0.1)
 
         # 5. S'occupe des documents enfants (récursivité) / Handle child documents (recursion)
@@ -344,7 +503,7 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             logger.info(f"Construction de la généalogie pour {doc_id}...")
             children_list = fetch_document_tree(base_url, doc_id)
             
-        for child in children_list:
+        for i, child in enumerate(children_list):
             # On passe les enfants déjà trouvés au prochain appel pour éviter de refaire l'appel API
             # This avoids N+1 problems by using already fetched data
             # On passe le dossier actuel comme dossier parent pour les enfants
@@ -354,7 +513,9 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
                 doc_dir, 
                 processed_ids, 
                 selected_format=selected_format,
-                children_list=child.get("children", [])
+                children_list=child.get("children", []),
+                backend=backend,
+                order=i
             )
 
     except Exception as e:
@@ -402,6 +563,25 @@ def main():
     )
 
     parser.add_argument(
+        "--backend", "-b",
+        choices=["zensical"],
+        default=os.getenv("BACKEND"),
+        help="""
+        Moteur de site statique à utiliser pour la configuration (peut être défini via BACKEND dans .env).
+        Static site generator backend to use for configuration (can be set via BACKEND in .env).
+        """
+    )
+
+    parser.add_argument(
+        "--deploy", "-d",
+        action="store_true",
+        help="""
+        Lance le build et le déploiement vers GitHub Pages après le téléchargement.
+        Starts the build and deployment to GitHub Pages after downloading.
+        """
+    )
+
+    parser.add_argument(
         "urls", 
         nargs="*", 
         help="""
@@ -413,29 +593,53 @@ def main():
     
     args = parser.parse_args()
     
+    # Si le backend est zensical, on force le format markdown uniquement
+    # If the backend is zensical, we force markdown format only
+    if args.backend == "zensical" and args.format != "markdown":
+        logger.info("Backend Zensical détecté : Forçage du format Markdown uniquement.")
+        args.format = "markdown"
+
     if args.no_cache:
         # Vide le cache si demandé / Clear cache if requested
         logger.warning("Suppression du cache local...")
         session.cache.clear()
 
     if not args.urls:
-        # Si aucune adresse n'est donnée, utilise des exemples
-        # If no address is given, use examples
-        logger.info("Aucune adresse donnée, utilisation des exemples...")
-        example_ids = [
-            "fa5583b2-37fc-4016-998f-f5237fd41642", # Exemple du test
-        ]
-        base_url = "https://notes.liiib.re/docs"
-        for doc_id in example_ids:
-            process_document(base_url, doc_id, selected_format=args.format)
-    else:
+        # Si aucune adresse n'est donnée, utilise le .env ou des exemples
+        # If no address is given, use .env or examples
+        env_url = os.getenv("DOCS_URL")
+        if env_url:
+            logger.info(f"Utilisation de l'URL du fichier .env : {env_url}")
+            args.urls = [env_url]
+        else:
+            logger.info("Aucune adresse donnée, utilisation des exemples...")
+            args.urls = ["https://notes.liiib.re/docs/fa5583b2-37fc-4016-998f-f5237fd41642/"]
+    
+    # Si l'option deploy est désactivée, on procède au téléchargement
+    # Conformément à la consigne, on ne télécharge pas si on déploie
+    # If deploy option is disabled, we proceed to download
+    # As per instructions, we don't download if we are deploying
+    if not args.deploy:
         # Pour chaque adresse donnée / For each given address
-        for url in args.urls:
+        for i, url in enumerate(args.urls):
             try:
                 base_url, doc_id = parse_docs_url(url)
-                process_document(base_url, doc_id, selected_format=args.format)
+                process_document(base_url, doc_id, selected_format=args.format, backend=args.backend, order=i)
             except ValueError as e:
                 logger.error(e)
+    else:
+        logger.info("Option --deploy détectée : Utilisation des fichiers locaux existants (pas de téléchargement).")
+            
+    # Si l'option deploy est activée / If deploy option is enabled
+    if args.deploy:
+        if args.backend == "zensical":
+            # On récupère l'adresse du dépôt depuis le .env
+            # Get the repo address from .env
+            github_repo = os.getenv("GITHUB_REPO")
+            deploy_zensical("content", github_repo)
+        else:
+            logger.warning("Le déploiement n'est pas encore supporté pour ce backend.")
+            # Deployment is not yet supported for this backend.
 
 if __name__ == "__main__":
     main()
