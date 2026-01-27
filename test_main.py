@@ -127,9 +127,11 @@ class TestDocs2Static(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(parent_dir, img1)), f"L'image {img1} devrait être téléchargée")
         self.assertTrue(os.path.exists(os.path.join(parent_dir, img2)), f"L'image {img2} devrait être téléchargée")
         
-        # Vérification des liens dans le markdown
+        # Vérification des liens et du titre dans le markdown
         with open(os.path.join(parent_dir, "index.md"), "r", encoding="utf-8") as f:
             md_content = f.read()
+            # Vérifie que le titre est présent en H1 au début (après le frontmatter)
+            self.assertIn("# ZenDocs : Parent", md_content)
             self.assertIn(f"![badge\\_grenoble.png]({img1})", md_content)
             self.assertIn(f"![help-freestockpro-3036405.fhd.jpg]({img2})", md_content)
             self.assertNotIn("https://notes.liiib.re/media/", md_content)
@@ -285,6 +287,29 @@ class TestDocs2Static(unittest.TestCase):
                         mock_deploy.assert_called()
         
         logger.info("SUCCÈS: test_deploy_skips_download")
+
+    def test_cleanup_before_download(self):
+        """Vérifie que le dossier source est bien effacé avant le téléchargement."""
+        logger.info("Test: cleanup source directory before download")
+        
+        import unittest.mock as mock
+        # On utilise des patchs pour simuler l'existence du dossier et sa suppression
+        # We use patches to simulate directory existence and its deletion
+        with mock.patch('os.path.exists') as mock_exists:
+            mock_exists.return_value = True
+            with mock.patch('shutil.rmtree') as mock_rmtree:
+                with mock.patch('main.process_document'):
+                    # On simule l'appel standard (sans --deploy)
+                    test_args = ['main.py', 'https://notes.liiib.re/docs/id/']
+                    with mock.patch('sys.argv', test_args):
+                        with mock.patch('main.load_dotenv'):
+                            main.main()
+                            
+                            # Vérifie que rmtree a été appelé sur le bon dossier
+                            # Verify that rmtree was called on the correct directory
+                            mock_rmtree.assert_called_with("content/source")
+        
+        logger.info("SUCCÈS: test_cleanup_before_download")
 
     def test_zensical_deploy(self):
         """Vérifie que le déploiement Zensical fonctionne (si demandé)."""

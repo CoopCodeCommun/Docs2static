@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shutil
 from dotenv import load_dotenv
 import requests_cache
 import http.cookiejar
@@ -151,30 +152,132 @@ def fetch_document_children(base_url: str, parent_id: str) -> List[Dict[str, Any
     # Renvoie la liste des enfants / Return the list of children
     return response.json().get("results", [])
 
+def fetch_document_details(base_url: str, doc_id: str) -> Dict[str, Any]:
+    """
+    Récupère les détails d'un document (pour avoir son path et autres infos).
+    Fetches document details (to get its path and other info).
+    """
+    url = get_docs_api_url(base_url, f"/documents/{doc_id}/")
+    response = session.get(url)
+    
+    if response.status_code == 429:
+        time.sleep(2)
+        response = session.get(url)
+        
+    response.raise_for_status()
+    source = "CACHE" if response.from_cache else "RÉSEAU"
+    logger.info(f"[{source}] Détails du document : {doc_id}")
+    
+    return response.json()
+
+def fetch_document_descendants(base_url: str, doc_id: str) -> List[Dict[str, Any]]:
+    """
+    Récupère TOUS les descendants d'un document via la nouvelle API optimisée.
+    Fetches ALL descendants of a document via the new optimized API.
+    """
+    # 1. On tente d'abord la route suggérée /documents/all/
+    # Try the suggested route first
+    for param in ["ancestor", "id"]:
+        all_url = get_docs_api_url(base_url, f"/documents/all/?{param}={doc_id}")
+        try:
+            response = session.get(all_url)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("count", 0) > 0:
+                    source = "CACHE" if response.from_cache else "RÉSEAU"
+                    logger.info(f"[{source}] Récupération groupée via /all/ (param={param}) pour : {doc_id}")
+                    return data.get("results", [])
+        except Exception:
+            pass
+
+    # 2. On tente la route standard /documents/{id}/descendants/
+    # Try the standard descendants route
+    url = get_docs_api_url(base_url, f"/documents/{doc_id}/descendants/")
+    
+    results = []
+    try:
+        while url:
+            response = session.get(url)
+            
+            if response.status_code == 404:
+                return None if not results else results
+                
+            if response.status_code == 429:
+                time.sleep(2)
+                response = session.get(url)
+                
+            response.raise_for_status()
+            data = response.json()
+            results.extend(data.get("results", []))
+            
+            # Gestion de la pagination / Handling pagination
+            url = data.get("next")
+            
+        if results:
+            source = "CACHE" if response.from_cache else "RÉSEAU"
+            logger.info(f"[{source}] Récupération groupée via /descendants/ pour : {doc_id}")
+            return results
+            
+        return None
+    except Exception as e:
+        logger.warning(f"Impossible d'utiliser l'API optimisée : {e}")
+        return None
+
 def fetch_document_tree(base_url: str, doc_id: str) -> List[Dict[str, Any]]:
     """
-    Construit l'arbre généalogique complet des documents enfants.
-    Builds the complete genealogy tree of child documents.
+    Construit l'arbre généalogique complet des documents enfants de façon optimisée.
+    Builds the complete genealogy tree of child documents in an optimized way.
     """
-    # On récupère d'abord les enfants directs / Get immediate children first
+    # 1. On tente d'abord de récupérer tous les descendants d'un coup
+    # Try to fetch all descendants at once first
+    all_descendants = fetch_document_descendants(base_url, doc_id)
+    
+    if all_descendants is not None:
+        # Si ça a marché, on reconstruit l'arbre localement à partir des 'path'
+        # If it worked, rebuild the tree locally using 'path'
+        root_doc = fetch_document_details(base_url, doc_id)
+        root_path = root_doc.get("path")
+        
+        if not root_path:
+            logger.warning(f"Le document racine {doc_id} n'a pas de path. Abandon de l'optimisation.")
+            return fetch_document_children(base_url, doc_id) # On renvoie au moins les enfants directs
+        
+        # On indexe les docs par leur path pour les retrouver vite
+        # Index docs by path for quick lookup
+        docs_by_path = {root_path: root_doc}
+        root_doc["children"] = []
+        
+        # On initialise les enfants de chaque descendant
+        # Initialize children for each descendant
+        for d in all_descendants:
+            d["children"] = []
+            docs_by_path[d["path"]] = d
+            
+        # On range chaque document chez son parent
+        # Put each document under its parent
+        for d in all_descendants:
+            path = d["path"]
+            # Sur Docs, le parent a un path qui est le préfixe (7 chars en moins)
+            # On Docs, parent path is the prefix (7 chars less)
+            parent_path = path[:-7]
+            if parent_path in docs_by_path:
+                docs_by_path[parent_path]["children"].append(d)
+                
+        # On renvoie la liste des enfants du document racine
+        # Return the list of children of the root document
+        return root_doc.get("children", [])
+
+    # 2. Méthode de secours (récursive) si l'API optimisée n'est pas disponible
+    # Fallback recursive method if optimized API is not available
+    logger.info(f"Utilisation de la méthode récursive pour : {doc_id}")
     immediate_children = fetch_document_children(base_url, doc_id)
     
-    # Pour chaque enfant, on regarde s'il a lui-même des enfants
-    # For each child, check if they have children themselves
     for child in immediate_children:
-        # On attend un tout petit peu entre chaque branche / Wait a bit between each branch
         time.sleep(0.1)
-        
-        # L'API nous donne 'numchild', le nombre d'enfants directs
-        # The API gives us 'numchild', the number of direct children
         num_children = child.get("numchild", 0)
-        
         if num_children > 0:
-            # Si il y a des enfants, on descend récursivement
-            # If there are children, we go down recursively
             child["children"] = fetch_document_tree(base_url, child["id"])
         else:
-            # Sinon, la liste est vide / Otherwise, the list is empty
             child["children"] = []
             
     return immediate_children
@@ -252,8 +355,6 @@ def download_and_replace_images(content: str, doc_dir: str, content_type: str = 
     # Search for Markdown images
     if content_type == "markdown":
         # Regex pour trouver ![texte](url)
-        # On tente aussi de capturer une légende "logo" sur la ligne suivante
-        # Try to capture a "logo" legend on the next line
         pattern = r'!\[(.*?)\]\((https?://.*?)\)'
         
         def md_replacer(match):
@@ -276,9 +377,9 @@ def download_and_replace_images(content: str, doc_dir: str, content_type: str = 
                     source = "CACHE" if img_res.from_cache else "RÉSEAU"
                     logger.info(f"[{source}] Image localisée : {filename}")
                     
-                    # Si l'alt est "logo", on le mémorise
-                    # If alt is "logo", remember it
-                    if alt.lower() == "logo":
+                    # On prend la première image rencontrée comme logo
+                    # We take the first image encountered as the logo
+                    if not logo_filename:
                         logo_filename = filename
                         
                     return f"![{alt}]({filename})"
@@ -288,14 +389,6 @@ def download_and_replace_images(content: str, doc_dir: str, content_type: str = 
                 return match.group(0)
         
         new_content = re.sub(pattern, md_replacer, content)
-        
-        # Cas spécial Docs : la légende est parfois sur la ligne suivante
-        # Special Docs case: legend is sometimes on the next line
-        # On cherche !\[.*?\]\((.*?)\)\nlogo
-        if not logo_filename:
-            match_logo = re.search(r'!\[.*?\]\((.*?)\)\s*\n\s*logo', new_content, re.IGNORECASE)
-            if match_logo:
-                logo_filename = match_logo.group(1)
 
         return new_content, logo_filename
 
@@ -304,9 +397,6 @@ def download_and_replace_images(content: str, doc_dir: str, content_type: str = 
     else:
         # Regex pour trouver <img ... src="url" ...>
         pattern = r'<img\s+([^>]*?)src="(https?://.*?)"([^>]*?)>'
-        
-        # On cherche aussi les figures avec légendes / Also search for figures with captions
-        # <figure ... data-caption="logo"><img ... src="url">
         
         def html_replacer(match):
             nonlocal logo_filename
@@ -325,9 +415,9 @@ def download_and_replace_images(content: str, doc_dir: str, content_type: str = 
                     source = "CACHE" if img_res.from_cache else "RÉSEAU"
                     logger.info(f"[{source}] Image localisée : {filename}")
                     
-                    # Vérifie si c'est un logo / Check if it's a logo
-                    if 'alt="logo"' in before.lower() or 'alt="logo"' in after.lower() or \
-                       'data-caption="logo"' in before.lower() or 'data-caption="logo"' in after.lower():
+                    # On prend la première image rencontrée comme logo
+                    # We take the first image encountered as the logo
+                    if not logo_filename:
                         logo_filename = filename
 
                     return f'<img {before}src="{filename}"{after}>'
@@ -337,13 +427,6 @@ def download_and_replace_images(content: str, doc_dir: str, content_type: str = 
                 return match.group(0)
                 
         new_content = re.sub(pattern, html_replacer, content)
-        
-        # Vérification supplémentaire pour figcaption
-        if not logo_filename:
-            # <figure ...><img src="filename">...<figcaption>logo</figcaption></figure>
-            match_fig = re.search(r'<img\s+[^>]*?src="([^"]+)"[^>]*?>.*?<figcaption>logo</figcaption>', new_content, re.IGNORECASE | re.DOTALL)
-            if match_fig:
-                logo_filename = match_fig.group(1)
 
         return new_content, logo_filename
 
@@ -474,9 +557,16 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             md_with_fm = "---\n"
             for key, value in final_frontmatter.items():
                 # On évite de mettre des objets complexes si il y en a
+                # Avoid adding complex objects if any
                 if isinstance(value, (str, int, float)):
                     md_with_fm += f"{key}: {value}\n"
-            md_with_fm += "---\n\n" + clean_md
+            md_with_fm += "---\n\n"
+            
+            # Ajout du titre en tant que titre H1 au début du contenu
+            # Add the title as H1 heading at the beginning of the content
+            md_with_fm += f"# {title}\n\n"
+            
+            md_with_fm += clean_md
             
             save_file(os.path.join(doc_dir, "index.md"), md_with_fm)
         
@@ -636,6 +726,13 @@ def main():
     # If deploy option is disabled, we proceed to download
     # As per instructions, we don't download if we are deploying
     if not args.deploy:
+        # Nettoyage du dossier source avant le nouveau téléchargement
+        # Cleaning the source folder before the new download
+        source_dir = "content/source"
+        if os.path.exists(source_dir):
+            logger.info(f"Nettoyage du dossier source : {source_dir}")
+            shutil.rmtree(source_dir)
+
         # Pour chaque adresse donnée / For each given address
         for i, url in enumerate(args.urls):
             try:
