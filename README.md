@@ -70,6 +70,11 @@ Pour vérifier que tout fonctionne correctement avec des données réelles :
 uv run python3 test_main.py
 ```
 
+#### Options de test :
+- `--no-cache` : Vider le cache avant de lancer les tests.
+- `--deploy` : Tester le déploiement réel vers le dépôt de test.
+- `--test-zensical` : Activer un point d'arrêt interactif pour vérifier le rendu local avec `zensical serve`.
+
 ---
 
 ## English
@@ -137,6 +142,11 @@ To verify everything works correctly with real data:
 ```bash
 uv run python3 test_main.py
 ```
+
+#### Testing options:
+- `--no-cache`: Clear cache before running tests.
+- `--deploy`: Test real deployment to the test repository.
+- `--test-zensical`: Enable an interactive breakpoint to check local rendering with `zensical serve`.
 
 ---
 

@@ -573,13 +573,21 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # 4.5 Configuration du backend si c'est le premier document
         # Backend configuration if it's the first document
         if len(processed_ids) == 1 and backend:
+            # Si on n'a pas encore la liste des enfants, on construit l'arbre généalogique
+            # nécessaire pour la navigation
+            # If we don't have the children list yet, build the genealogy tree
+            # needed for navigation
+            if children_list is None:
+                logger.info(f"Construction de la généalogie pour {doc_id}...")
+                children_list = fetch_document_tree(base_url, doc_id)
+
             # On remonte d'un cran par rapport à 'source'
             # Go up one level from 'source'
             base_content_dir = os.path.dirname(parent_output_dir)
             if backend.lower() == "zensical":
                 # L'URL racine est l'URL du premier document
                 root_docs_url = f"{base_url}/docs/{doc_id}/"
-                setup_zensical_backend(base_content_dir, final_frontmatter, title, root_docs_url=root_docs_url)
+                setup_zensical_backend(base_content_dir, final_frontmatter, title, root_docs_url=root_docs_url, tree=children_list)
 
         # 4.6 Nettoyage et sauvegarde des métadonnées
         # Metadata cleanup and saving

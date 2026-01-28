@@ -4,7 +4,7 @@ import subprocess
 import shutil
 import logging
 import unicodedata
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # On récupère le logger configuré dans le main
 # We get the logger configured in main
@@ -26,41 +26,100 @@ def slugify(text: str) -> str:
     text = re.sub(r'[-\s]+', '-', text)
     return text
 
-def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, root_docs_url: str = None):
+def build_nav_structure(tree, current_rel_path=""):
+    """
+    Construit récursivement la structure de navigation pour Zensical.
+    Recursively builds the navigation structure for Zensical.
+    """
+    nav = []
+    for item in tree:
+        title = item.get("title", "Sans titre")
+        slug = slugify(title)
+        # On construit le chemin relatif par rapport au dossier racine de la doc
+        # Build the relative path from the documentation root
+        rel_path = f"{current_rel_path}/{slug}" if current_rel_path else slug
+        
+        index_file = f"{rel_path}/index.md"
+        
+        children = item.get("children", [])
+        if children:
+            # Si le document a des enfants, on crée une section
+            # If the document has children, create a section
+            child_nav = build_nav_structure(children, rel_path)
+            section_nav = [index_file] + child_nav
+            nav.append({title: section_nav})
+        else:
+            # Document simple
+            # Simple document
+            nav.append({title: index_file})
+    return nav
+
+def format_nav_to_toml(nav_list, indent=4):
+    """
+    Formate une liste de navigation en format TOML.
+    Formats a navigation list into TOML format.
+    """
+    def _format_item(item, level):
+        spaces = " " * (level * indent)
+        if isinstance(item, str):
+            return f'"{item}"'
+        elif isinstance(item, dict):
+            for key, value in item.items():
+                if isinstance(value, str):
+                    return f'{{ "{key}" = "{value}" }}'
+                elif isinstance(value, list):
+                    inner_indent = level + 1
+                    inner_spaces = " " * (inner_indent * indent)
+                    lines = [_format_item(v, inner_indent) for v in value]
+                    inner_content = f",\n{inner_spaces}".join(lines)
+                    return f'{{ "{key}" = [\n{inner_spaces}{inner_content}\n{spaces}] }}'
+        return str(item)
+
+    formatted_items = [_format_item(item, 1) for item in nav_list]
+    content = ",\n    ".join(formatted_items)
+    return f"nav = [\n    \"index.md\",\n    {content}\n]"
+
+def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, root_docs_url: str = None, tree: List[Dict[str, Any]] = None):
     """
     Configure Zensical pour le dossier donné.
+    Généré seulement s'il n'existe pas déjà.
     Configures Zensical for the given directory.
+    Generated only if it doesn't already exist.
     """
     zensical_toml = os.path.join(base_dir, "zensical.toml")
     
-    # 1. Vérifie si zensical.toml existe, sinon lance 'zensical new'
-    # Check if zensical.toml exists, otherwise run 'zensical new'
-    if not os.path.exists(zensical_toml):
-        logger.info(f"Initialisation de Zensical dans {base_dir}...")
-        try:
-            # On crée le dossier s'il n'existe pas / Create directory if it doesn't exist
-            os.makedirs(base_dir, exist_ok=True)
-            # On lance la commande zensical new / Run the zensical new command
-            # On utilise 'uv run' pour être sûr d'avoir les dépendances
-            subprocess.run(["uv", "run", "zensical", "new", base_dir], check=True, capture_output=True)
-            
-            # Zensical new crée un dossier 'docs' par défaut. 
-            # Comme on utilise 'source', on peut soit renommer 'source' en 'docs' 
-            # soit changer la config de zensical. Ici on va garder 'source' 
-            # et on va supprimer le dossier 'docs' vide créé par zensical new.
-            docs_dir = os.path.join(base_dir, "docs")
-            if os.path.exists(docs_dir):
-                shutil.rmtree(docs_dir)
-        except Exception as e:
-            logger.error(f"Erreur lors de l'initialisation de Zensical : {e}")
-            return
+    # Si le fichier existe déjà, on ne touche à rien
+    # If the file already exists, we do nothing
+    if os.path.exists(zensical_toml):
+        logger.info(f"Le fichier {zensical_toml} existe déjà, skipping configuration.")
+        return
+
+    # 1. Lance 'zensical new'
+    # Run 'zensical new'
+    logger.info(f"Initialisation de Zensical dans {base_dir}...")
+    try:
+        # On crée le dossier s'il n'existe pas / Create directory if it doesn't exist
+        os.makedirs(base_dir, exist_ok=True)
+        # On lance la commande zensical new / Run the zensical new command
+        # On utilise 'uv run' pour être sûr d'avoir les dépendances
+        subprocess.run(["uv", "run", "zensical", "new", base_dir], check=True, capture_output=True)
+        
+        # Zensical new crée un dossier 'docs' par défaut. 
+        # Comme on utilise 'source', on peut soit renommer 'source' en 'docs' 
+        # soit changer la config de zensical. Ici on va garder 'source' 
+        # et on va supprimer le dossier 'docs' vide créé par zensical new.
+        docs_dir = os.path.join(base_dir, "docs")
+        if os.path.exists(docs_dir):
+            shutil.rmtree(docs_dir)
+    except Exception as e:
+        logger.error(f"Erreur lors de l'initialisation de Zensical : {e}")
+        return
 
     # 2. Met à jour zensical.toml avec les métadonnées
     # Update zensical.toml with metadata
     try:
-        if os.path.exists(zensical_toml):
-            with open(zensical_toml, "r", encoding="utf-8") as f:
-                toml_content = f.read()
+        with open(zensical_toml, "r", encoding="utf-8") as f:
+            toml_content = f.read()
             
             # On remplace les variables par défaut par celles des métadonnées
             # Replace default variables with metadata ones
@@ -97,6 +156,19 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             # Utilise DOTALL pour capturer le bloc multi-ligne / Use DOTALL to capture multi-line block
             toml_content = re.sub(r'copyright\s*=\s*""".*?"""', copyright_block, toml_content, flags=re.DOTALL)
             
+            # Ajout de la navigation explicite si l'arbre est fourni
+            # Add explicit navigation if tree is provided
+            if tree:
+                nav_list = build_nav_structure(tree)
+                nav_toml = format_nav_to_toml(nav_list)
+                if re.search(r'#?\s*nav\s*=', toml_content):
+                    # Remplace une navigation existante (commentée ou non)
+                    # Replace existing navigation (commented or not)
+                    toml_content = re.sub(r'#?\s*nav\s*=\s*\[.*?\]', nav_toml, toml_content, flags=re.DOTALL)
+                else:
+                    # Ajoute sous la section [project] / Add under [project] section
+                    toml_content = toml_content.replace('[project]', f'[project]\n{nav_toml}')
+
             # 3. Configuration de la navigation et du dossier source
             # Navigation and source directory configuration
             

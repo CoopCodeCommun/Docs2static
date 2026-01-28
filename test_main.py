@@ -18,6 +18,10 @@ class TestDocs2Static(unittest.TestCase):
     # Variable to enable real deployment during tests
     run_deploy = False
     
+    # Variable pour activer les tests interactifs Zensical
+    # Variable to enable interactive Zensical tests
+    test_zensical = False
+    
     @classmethod
     def setUpClass(cls):
         """
@@ -145,25 +149,42 @@ class TestDocs2Static(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(child1_dir, "index.md")))
         
         # 3. Petit-enfant
-        gc_dir = os.path.join(child1_dir, "petit-enfant-sous-sous-partie")
-        self.assertTrue(os.path.exists(gc_dir))
-        self.assertFalse(os.path.exists(os.path.join(gc_dir, "index.html")))
-        self.assertTrue(os.path.exists(os.path.join(gc_dir, "index.md")))
+        gc1_dir = os.path.join(child1_dir, "premier-petit-enfant")
+        gc2_dir = os.path.join(child1_dir, "petit-enfant-sous-sous-partie")
+        gc3_dir = os.path.join(child1_dir, "dernier-petit-enfant")
+        
+        self.assertTrue(os.path.exists(gc1_dir))
+        self.assertTrue(os.path.exists(gc2_dir))
+        self.assertTrue(os.path.exists(gc3_dir))
+        
+        # 4. Arrière-petit-enfant
+        ggc_dir = os.path.join(gc2_dir, "et-voici-un-n-4")
+        self.assertTrue(os.path.exists(ggc_dir))
         
         # Vérification du frontmatter dans le markdown du petit-enfant
-        with open(os.path.join(gc_dir, "index.md"), "r", encoding="utf-8") as f:
+        with open(os.path.join(gc2_dir, "index.md"), "r", encoding="utf-8") as f:
             md_content = f.read()
             self.assertTrue(md_content.startswith("---"))
             self.assertIn("edit_url: https://notes.liiib.re/docs/0b4c67c5-f62f-45cc-80fd-a290cb04b384/", md_content)
             self.assertIn("category: sous sous partie 1", md_content)
         
         # Vérification d'un fichier metadata.json réel
-        with open(os.path.join(gc_dir, "metadata.json"), "r") as f:
+        with open(os.path.join(gc2_dir, "metadata.json"), "r") as f:
             meta = json.load(f)
             self.assertEqual(meta.get("category"), "sous sous partie 1")
             self.assertEqual(meta.get("title"), "Petit enfant : sous sous partie")
-            self.assertEqual(meta.get("order"), 0, "Le petit enfant devrait avoir l'ordre 0 (premier de sa liste)")
+            self.assertEqual(meta.get("order"), 1, "Le petit enfant devrait avoir l'ordre 1 (il est deuxième)")
             self.assertNotIn("path", meta)
+        
+        # Vérification du premier petit enfant
+        with open(os.path.join(gc1_dir, "metadata.json"), "r") as f:
+            meta = json.load(f)
+            self.assertEqual(meta.get("order"), 0, "Le premier petit enfant devrait avoir l'ordre 0")
+        
+        # Vérification du dernier petit enfant
+        with open(os.path.join(gc3_dir, "metadata.json"), "r") as f:
+            meta = json.load(f)
+            self.assertEqual(meta.get("order"), 2, "Le dernier petit enfant devrait avoir l'ordre 2")
         
         with open(os.path.join(parent_dir, "metadata.json"), "r") as f:
             meta = json.load(f)
@@ -198,11 +219,34 @@ class TestDocs2Static(unittest.TestCase):
             self.assertIn('repo = "fontawesome/solid/file-pen"', toml_content)
             self.assertNotIn('#"navigation.tabs"', toml_content)
             self.assertIn('#"navigation.sections"', toml_content)
+            
+            # Vérification de la navigation explicite
+            # Verification of explicit navigation
+            self.assertIn('nav = [', toml_content)
+            self.assertIn('"index.md"', toml_content)
+            self.assertIn('Premier enfant : sous partie', toml_content)
+            self.assertIn('premier-enfant-sous-partie/index.md', toml_content)
+            self.assertIn('Petit enfant : sous sous partie', toml_content)
+            self.assertIn('premier-enfant-sous-partie/petit-enfant-sous-sous-partie/index.md', toml_content)
+
             # On vérifie que la version non commentée n'est plus là, 
             # MAIS attention il peut y avoir des espaces. 
             # On cherche donc spécifiquement la version active sans le # devant
             self.assertFalse(re.search(r'^\s*"navigation.sections"', toml_content, re.MULTILINE))
         
+        # --- TEST DE NON-REMPLACEMENT DU TOML ---
+        # On modifie manuellement le TOML
+        with open(zensical_toml, "a", encoding="utf-8") as f:
+            f.write("\n# TEST_MODIFICATION\n")
+        
+        # On relance le traitement
+        main.process_document(self.base_url, self.doc_id, parent_output_dir=self.source_dir, selected_format="both", backend=backend)
+        
+        # On vérifie que notre modification est toujours là
+        with open(zensical_toml, "r", encoding="utf-8") as f:
+            new_toml_content = f.read()
+            self.assertIn("# TEST_MODIFICATION", new_toml_content, "Le fichier TOML ne doit pas être écrasé s'il existe déjà.")
+            
         logger.info("SUCCÈS: test_full_integration_download")
 
     def test_zensical_build(self):
@@ -336,6 +380,25 @@ class TestDocs2Static(unittest.TestCase):
         except Exception as e:
             self.fail(f"Le déploiement Zensical a échoué : {e}")
 
+    def test_zensical_serve_interactive(self):
+        """Test interactif pour vérifier le rendu Zensical."""
+        if not TestDocs2Static.test_zensical:
+            self.skipTest("Le test interactif Zensical n'est pas activé. Utilisez --test-zensical pour le tester.")
+            
+        logger.info("=== POINT D'ARRÊT TEST ZENSICAL ===")
+        logger.info(f"Veuillez ouvrir un NOUVEAU terminal et lancer :")
+        logger.info(f"cd {self.test_dir}")
+        logger.info(f"uv run zensical serve --port 8000")
+        input("Appuyez sur Entrée une fois que le serveur est lancé (Press Enter once the server is running)...")
+        
+        import requests
+        try:
+            response = requests.get("http://localhost:8000")
+            self.assertEqual(response.status_code, 200)
+            logger.info("Serveur Zensical accessible et répond correctement !")
+        except Exception as e:
+            self.fail(f"Impossible d'accéder au serveur Zensical : {e}")
+
 if __name__ == "__main__":
     # Vérifie si l'utilisateur veut vider le cache avant les tests
     # Check if the user wants to clear the cache before tests
@@ -351,5 +414,12 @@ if __name__ == "__main__":
         logger.warning("Option --deploy détectée : Le déploiement réel sera testé.")
         TestDocs2Static.run_deploy = True
         sys.argv.remove("--deploy")
+
+    # Vérifie si on doit tester Zensical de façon interactive
+    # Check if we should test Zensical interactively
+    if "--test-zensical" in sys.argv:
+        logger.warning("Option --test-zensical détectée : Le test interactif Zensical sera activé.")
+        TestDocs2Static.test_zensical = True
+        sys.argv.remove("--test-zensical")
         
     unittest.main()
