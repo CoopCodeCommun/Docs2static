@@ -6,7 +6,7 @@
 
 ## Français
 
-Docs2Static est un outil en Python permettant de transformer des documents édités collaborativement sur [Docs](https://docs.suite.anct.gouv.fr/) (basé sur BlockNote) en un site web statique professionnel.
+Docs2Static est un outil en Python permettant de transformer des documents édités collaborativement sur une instance [Docs](https://docs.suite.anct.gouv.fr/) en un site web statique professionnel.
 
 ### 🌟 Principes
 
@@ -102,7 +102,7 @@ uv run python3 test_main.py
 
 ## English
 
-Docs2Static is a Python tool that transforms collaborative documents from [Docs](https://docs.suite.anct.gouv.fr/) (based on BlockNote) into a professional static website.
+Docs2Static is a Python tool that transforms collaborative documents from [Docs](https://docs.suite.anct.gouv.fr/) into a professional static website.
 
 ### 🌟 Principles
 
