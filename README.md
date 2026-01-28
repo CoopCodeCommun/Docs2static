@@ -8,6 +8,8 @@
 
 Docs2Static est un outil en Python permettant de transformer des documents édités collaborativement sur une instance [Docs](https://docs.suite.anct.gouv.fr/) en un site web statique professionnel.
 
+**Exemple :** [Document source](https://notes.liiib.re/docs/778c5d28-cc11-4692-a17e-8e59c94c904a/) -> [Site généré](https://nasjoe.github.io/zendocs_test/)
+
 ### 🌟 Principes
 
 - **Récupération récursive** : Télécharge automatiquement toute l'arborescence (pages enfants, petits-enfants, etc.).
@@ -79,6 +81,7 @@ Pour masquer une page du site final :
 | `auteur·ice` / `author` | Nom affiché comme auteur du site et dans le copyright. |
 | `licence` / `license` | Type de licence affiché dans le copyright (ex: CC-BY-SA). |
 | `titre` / `title` | Titre de la page (écrase le titre Docs). Utilisé pour le nom du dossier et le titre H1. |
+| `brouillon` / `draft` | Si défini à `oui` ou `true`, la page et ses enfants sont ignorés. |
 | `date` | Date du document (format AAAA-MM-JJ). |
 
 #### Astuces :
@@ -103,6 +106,8 @@ uv run python3 test_main.py
 ## English
 
 Docs2Static is a Python tool that transforms collaborative documents from [Docs](https://docs.suite.anct.gouv.fr/) into a professional static website.
+
+**Example:** [Source document](https://notes.liiib.re/docs/778c5d28-cc11-4692-a17e-8e59c94c904a/) -> [Generated site](https://nasjoe.github.io/zendocs_test/)
 
 ### 🌟 Principles
 
@@ -175,6 +180,7 @@ To hide a page from the final site:
 | `author` / `auteur·ice` | Name displayed as the site author and in the copyright. |
 | `license` / `licence` | Type of license displayed in the copyright (e.g., CC-BY-SA). |
 | `title` / `titre` | Page title (overrides Docs title). Used for folder naming and H1 title. |
+| `draft` / `brouillon` | If set to `true` or `oui`, the page and its children are ignored. |
 | `date` | Document date (YYYY-MM-DD format). |
 
 #### Tips:
