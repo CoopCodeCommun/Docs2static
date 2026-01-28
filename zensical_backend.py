@@ -26,10 +26,12 @@ def slugify(text: str) -> str:
     text = re.sub(r'[-\s]+', '-', text)
     return text
 
-def build_nav_structure(tree, current_rel_path=""):
+def build_nav_structure(tree, base_docs_dir, current_rel_path=""):
     """
     Construit récursivement la structure de navigation pour Zensical.
+    Vérifie si les fichiers existent pour ignorer les brouillons.
     Recursively builds the navigation structure for Zensical.
+    Checks if files exist to ignore drafts.
     """
     nav = []
     for item in tree:
@@ -40,12 +42,19 @@ def build_nav_structure(tree, current_rel_path=""):
         rel_path = f"{current_rel_path}/{slug}" if current_rel_path else slug
         
         index_file = f"{rel_path}/index.md"
+        full_path = os.path.join(base_docs_dir, index_file)
         
+        # Si le fichier index.md n'existe pas, c'est probablement un draft ignoré
+        # If index.md does not exist, it's likely an ignored draft
+        if not os.path.exists(full_path):
+            logger.info(f"Navigation : Document ignoré (fichier absent) : {index_file}")
+            continue
+            
         children = item.get("children", [])
         if children:
             # Si le document a des enfants, on crée une section
             # If the document has children, create a section
-            child_nav = build_nav_structure(children, rel_path)
+            child_nav = build_nav_structure(children, base_docs_dir, rel_path)
             section_nav = [index_file] + child_nav
             nav.append({title: section_nav})
         else:
@@ -54,7 +63,7 @@ def build_nav_structure(tree, current_rel_path=""):
             nav.append({title: index_file})
     return nav
 
-def format_nav_to_toml(nav_list, indent=4):
+def format_nav_to_toml(nav_list, base_docs_dir, indent=4):
     """
     Formate une liste de navigation en format TOML.
     Formats a navigation list into TOML format.
@@ -77,7 +86,17 @@ def format_nav_to_toml(nav_list, indent=4):
 
     formatted_items = [_format_item(item, 1) for item in nav_list]
     content = ",\n    ".join(formatted_items)
-    return f"nav = [\n    \"index.md\",\n    {content}\n]"
+    
+    # On vérifie si l'index racine existe pour l'ajouter ou non
+    # Check if the root index exists to add it or not
+    root_index_exists = os.path.exists(os.path.join(base_docs_dir, "index.md"))
+    if root_index_exists:
+        if content:
+            return f"nav = [\n    \"index.md\",\n    {content}\n]"
+        else:
+            return "nav = [\n    \"index.md\"\n]"
+    else:
+        return f"nav = [\n    {content}\n]"
 
 def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, root_docs_url: str = None, tree: List[Dict[str, Any]] = None):
     """
@@ -128,8 +147,9 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             site_name = metadata.get("site_name") or metadata.get("title") or title
             toml_content = re.sub(r'site_name\s*=\s*".*?"', f'site_name = "{site_name}"', toml_content)
             
-            # site_description (depuis summary ou description)
-            site_desc = metadata.get("site_description") or metadata.get("summary") or "Documentation générée"
+            # site_description (depuis summary, résumé ou description)
+            # site_description (from summary, résumé or description)
+            site_desc = metadata.get("site_description") or metadata.get("summary") or metadata.get("résumé") or metadata.get("description") or "Documentation générée"
             toml_content = re.sub(r'site_description\s*=\s*".*?"', f'site_description = "{site_desc}"', toml_content)
             
             # site_author
@@ -156,11 +176,22 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             # Utilise DOTALL pour capturer le bloc multi-ligne / Use DOTALL to capture multi-line block
             toml_content = re.sub(r'copyright\s*=\s*""".*?"""', copyright_block, toml_content, flags=re.DOTALL)
             
+            # docs_dir pointe vers le dossier parent (seul le fichier originel)
+            # docs_dir points to the parent folder (original file only)
+            parent_slug = slugify(title)
+            docs_dir_value = f"source/{parent_slug}"
+            base_docs_dir = os.path.join(base_dir, docs_dir_value)
+            
+            if re.search(r'docs_dir\s*=', toml_content):
+                toml_content = re.sub(r'docs_dir\s*=\s*".*?"', f'docs_dir = "{docs_dir_value}"', toml_content)
+            else:
+                toml_content = toml_content.replace('[project]', f'[project]\ndocs_dir = "{docs_dir_value}"')
+
             # Ajout de la navigation explicite si l'arbre est fourni
             # Add explicit navigation if tree is provided
             if tree:
-                nav_list = build_nav_structure(tree)
-                nav_toml = format_nav_to_toml(nav_list)
+                nav_list = build_nav_structure(tree, base_docs_dir)
+                nav_toml = format_nav_to_toml(nav_list, base_docs_dir)
                 if re.search(r'#?\s*nav\s*=', toml_content):
                     # Remplace une navigation existante (commentée ou non)
                     # Replace existing navigation (commented or not)
@@ -168,19 +199,6 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
                 else:
                     # Ajoute sous la section [project] / Add under [project] section
                     toml_content = toml_content.replace('[project]', f'[project]\n{nav_toml}')
-
-            # 3. Configuration de la navigation et du dossier source
-            # Navigation and source directory configuration
-            
-            # docs_dir pointe vers le dossier parent (seul le fichier originel)
-            # docs_dir points to the parent folder (original file only)
-            parent_slug = slugify(title)
-            docs_dir_value = f"source/{parent_slug}"
-            
-            if re.search(r'docs_dir\s*=', toml_content):
-                toml_content = re.sub(r'docs_dir\s*=\s*".*?"', f'docs_dir = "{docs_dir_value}"', toml_content)
-            else:
-                toml_content = toml_content.replace('[project]', f'[project]\ndocs_dir = "{docs_dir_value}"')
 
             # Vérifie/ajoute features = ["navigation.tabs"] dans [project.theme]
             # Verify/add features = ["navigation.tabs"] in [project.theme]

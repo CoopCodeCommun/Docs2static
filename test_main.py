@@ -83,7 +83,7 @@ class TestDocs2Static(unittest.TestCase):
         fm, clean_content = main.extract_frontmatter(data["content"])
         
         self.assertEqual(fm.get("auteur·ice"), "Coopérative Code Commun")
-        self.assertEqual(fm.get("status"), "published")
+        self.assertEqual(fm.get("brouillon"), "non")
         self.assertNotIn("---", clean_content, "Le bloc frontmatter devrait être retiré du contenu.")
         logger.info("SUCCÈS: test_api_fetch_and_html_extraction")
 
@@ -143,8 +143,10 @@ class TestDocs2Static(unittest.TestCase):
         # 2. Enfants
         child1_dir = os.path.join(parent_dir, "premier-enfant-sous-partie")
         child2_dir = os.path.join(parent_dir, "second-enfant-deuxieme-sous-partie")
+        child3_dir = os.path.join(parent_dir, "voici-un-brouillon")
         self.assertTrue(os.path.exists(child1_dir))
         self.assertTrue(os.path.exists(child2_dir))
+        self.assertFalse(os.path.exists(child3_dir), "Le document brouillon ne devrait pas être créé")
         self.assertFalse(os.path.exists(os.path.join(child1_dir, "index.html")))
         self.assertTrue(os.path.exists(os.path.join(child1_dir, "index.md")))
         
@@ -291,6 +293,140 @@ class TestDocs2Static(unittest.TestCase):
         self.assertEqual(ensure_ssh_url("git@gitlab.com:User/Repo.git"), "git@gitlab.com:User/Repo.git")
         
         logger.info("SUCCÈS: test_ensure_ssh_url")
+
+    def test_is_draft(self):
+        """Vérifie la fonction is_draft avec différents alias et valeurs."""
+        logger.info("Test: is_draft")
+        from main import is_draft
+        
+        # Anglais
+        self.assertTrue(is_draft({"draft": "true"}))
+        self.assertTrue(is_draft({"draft": "yes"}))
+        self.assertFalse(is_draft({"draft": "false"}))
+        
+        # Français
+        self.assertTrue(is_draft({"brouillon": "true"}))
+        self.assertTrue(is_draft({"brouillon": "oui"}))
+        self.assertTrue(is_draft({"brouillon": "OUI "}))
+        self.assertFalse(is_draft({"brouillon": "non"}))
+        self.assertFalse(is_draft({"brouillon": "false"}))
+        
+        # Vide / Absent
+        self.assertFalse(is_draft({}))
+        self.assertFalse(is_draft({"title": "Test"}))
+        
+        logger.info("SUCCÈS: test_is_draft")
+
+    def test_french_metadata_aliases(self):
+        """Vérifie que les alias français sont bien utilisés par le backend."""
+        logger.info("Test: french metadata aliases")
+        from zensical_backend import setup_zensical_backend
+        import unittest.mock as mock
+        
+        metadata = {
+            "auteur·ice": "Jean Dupont",
+            "résumé": "Ceci est une description en français",
+            "licence": "GPLv3"
+        }
+        
+        # On mocke les appels système pour ne pas créer de vrais fichiers
+        with mock.patch('os.path.exists', return_value=False):
+            with mock.patch('os.makedirs'):
+                with mock.patch('subprocess.run'):
+                    with mock.patch('builtins.open', mock.mock_open(read_data='[project]\nsite_name = "test"\nsite_description = "desc"\nsite_author = "author"\ncopyright = """\ncopy\n"""\ndocs_dir = "docs"')):
+                        with mock.patch('zensical_backend.build_nav_structure', return_value=[]):
+                            with mock.patch('zensical_backend.format_nav_to_toml', return_value="nav = []"):
+                                # On récupère le contenu écrit dans le fichier
+                                with mock.patch('builtins.open', mock.mock_open(read_data='[project]\nsite_name = "test"\nsite_description = "desc"\nsite_author = "author"\ncopyright = """\ncopy\n"""\ndocs_dir = "docs"')) as m:
+                                    setup_zensical_backend("temp", metadata, "Le Titre")
+                                    
+                                    # On vérifie ce qui a été écrit
+                                    # m() est le mock_open, m().write est l'appel à write
+                                    written_content = ""
+                                    for call in m().write.call_args_list:
+                                        written_content += call[0][0]
+                                    
+                                    self.assertIn('site_author = "Jean Dupont"', written_content)
+                                    self.assertIn('site_description = "Ceci est une description en français"', written_content)
+                                    self.assertIn('Copyright &copy; 2026 Jean Dupont - GPLv3', written_content)
+
+        logger.info("SUCCÈS: test_french_metadata_aliases")
+
+    def test_draft_skip(self):
+        """Vérifie que les documents marqués comme draft ne sont pas enregistrés."""
+        logger.info("Test: draft skip")
+        import unittest.mock as mock
+        
+        # On mocke fetch_document_content pour retourner un contenu avec draft: true
+        mock_data = {
+            "title": "Draft Doc",
+            "content": "---\ndraft: true\n---\nContenu brouillon"
+        }
+        
+        with mock.patch('main.fetch_document_content', return_value=mock_data):
+            with mock.patch('main.fetch_document_tree', return_value=[]):
+                # On utilise un dossier de test dédié
+                draft_dir = os.path.join(self.test_dir, "draft_test")
+                if os.path.exists(draft_dir):
+                    shutil.rmtree(draft_dir)
+                
+                # On traite le document
+                main.process_document(self.base_url, "draft-id", draft_dir, selected_format="markdown")
+                
+                # Le dossier ne devrait pas contenir index.md
+                # En fait, si c'est un draft, on ne devrait même pas créer le dossier doc_dir
+                # ou alors on le supprime.
+                doc_path = os.path.join(draft_dir, "draft-doc")
+                file_path = os.path.join(doc_path, "index.md")
+                
+                self.assertFalse(os.path.exists(file_path), "Le fichier index.md ne devrait pas exister pour un draft")
+        
+        logger.info("SUCCÈS: test_draft_skip")
+
+    def test_draft_skip_child(self):
+        """Vérifie qu'un enfant marqué comme draft n'est pas enregistré mais que son parent l'est."""
+        logger.info("Test: draft skip child")
+        import unittest.mock as mock
+        
+        # Racine (publiée)
+        root_data = {
+            "title": "Root Doc",
+            "content": "---\ndraft: false\n---\nContenu racine"
+        }
+        # Enfant (brouillon)
+        child_data = {
+            "title": "Child Draft",
+            "content": "---\ndraft: true\n---\nContenu enfant brouillon"
+        }
+        
+        # Liste des enfants
+        children_list = [{"id": "child-id", "title": "Child Draft", "numchild": 0}]
+        
+        def side_effect(bu, doc_id, fmt="html"):
+            if doc_id == "root-id":
+                return root_data
+            if doc_id == "child-id":
+                return child_data
+            return {}
+
+        with mock.patch('main.fetch_document_content', side_effect=side_effect):
+            with mock.patch('main.fetch_document_tree', return_value=children_list):
+                # On utilise un dossier de test dédié
+                draft_dir = os.path.join(self.test_dir, "draft_child_test")
+                if os.path.exists(draft_dir):
+                    shutil.rmtree(draft_dir)
+                
+                # On traite la racine
+                main.process_document(self.base_url, "root-id", draft_dir, selected_format="markdown")
+                
+                # Racine doit exister
+                self.assertTrue(os.path.exists(os.path.join(draft_dir, "root-doc", "index.md")))
+                
+                # Enfant ne doit pas exister
+                self.assertFalse(os.path.exists(os.path.join(draft_dir, "root-doc", "child-draft", "index.md")))
+                self.assertFalse(os.path.exists(os.path.join(draft_dir, "root-doc", "child-draft")))
+        
+        logger.info("SUCCÈS: test_draft_skip_child")
 
     def test_get_pages_url(self):
         """Vérifie le calcul des URLs de pages (GitHub/GitLab)."""

@@ -327,6 +327,21 @@ def extract_frontmatter_markdown(content: str) -> Tuple[Dict[str, str], str]:
         content = content[match.end():].lstrip()
     return frontmatter, content
 
+def is_draft(frontmatter: Dict[str, str]) -> bool:
+    """
+    Vérifie si le document est un brouillon (en anglais ou français).
+    Checks if the document is a draft (in English or French).
+    """
+    # Vérifie 'draft' ou 'brouillon'
+    # Checks 'draft' or 'brouillon'
+    draft_val = frontmatter.get("draft") or frontmatter.get("brouillon")
+    if not draft_val:
+        return False
+        
+    draft_val = str(draft_val).lower().strip()
+    # Supporte true, yes, oui, 1 / Supports true, yes, oui, 1
+    return draft_val in ["true", "yes", "oui", "1"]
+
 def save_file(file_path: str, content: str):
     """
     Enregistre le texte dans un fichier sur l'ordinateur.
@@ -444,6 +459,8 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
     if processed_ids is None:
         processed_ids = set()
     
+    is_root = len(processed_ids) == 0
+
     # Si on a déjà fait ce document, on s'arrête / If already done, stop
     if doc_id in processed_ids:
         return
@@ -517,6 +534,17 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             clean_md, md_logo = download_and_replace_images(clean_md, doc_dir, "markdown")
             logo_filename = logo_filename or md_logo
         
+        # 3.6 Vérification du statut brouillon / Draft status check
+        # Si le document est marqué comme brouillon, on ne l'enregistre pas
+        # If the document is marked as draft, we don't save it
+        if is_draft(final_frontmatter):
+            logger.info(f"Document ignoré car marqué comme brouillon : {title}")
+            if os.path.exists(doc_dir):
+                shutil.rmtree(doc_dir)
+            # On arrête le traitement ici pour ce document et ses enfants
+            # We stop processing here for this document and its children
+            return
+
         # Si un logo a été trouvé, on l'ajoute aux métadonnées temporairement pour le backend
         # If a logo was found, add it to metadata temporarily for the backend
         if logo_filename:
@@ -570,25 +598,6 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             
             save_file(os.path.join(doc_dir, "index.md"), md_with_fm)
         
-        # 4.5 Configuration du backend si c'est le premier document
-        # Backend configuration if it's the first document
-        if len(processed_ids) == 1 and backend:
-            # Si on n'a pas encore la liste des enfants, on construit l'arbre généalogique
-            # nécessaire pour la navigation
-            # If we don't have the children list yet, build the genealogy tree
-            # needed for navigation
-            if children_list is None:
-                logger.info(f"Construction de la généalogie pour {doc_id}...")
-                children_list = fetch_document_tree(base_url, doc_id)
-
-            # On remonte d'un cran par rapport à 'source'
-            # Go up one level from 'source'
-            base_content_dir = os.path.dirname(parent_output_dir)
-            if backend.lower() == "zensical":
-                # L'URL racine est l'URL du premier document
-                root_docs_url = f"{base_url}/docs/{doc_id}/"
-                setup_zensical_backend(base_content_dir, final_frontmatter, title, root_docs_url=root_docs_url, tree=children_list)
-
         # 4.6 Nettoyage et sauvegarde des métadonnées
         # Metadata cleanup and saving
         
@@ -598,15 +607,16 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # Ajoute l'ordre d'apparition / Add appearance order
         final_frontmatter["order"] = order
         
-        # On retire les champs temporaires ou inutiles pour le stockage final dans metadata.json
-        # Remove temporary or unnecessary fields for final storage in metadata.json
+        # On fait une copie pour le stockage final (sans les champs temporaires)
+        # We make a copy for final storage (without temporary fields)
+        metadata_to_save = final_frontmatter.copy()
         for field in ["path", "logo_file", "edit_url"]:
-            if field in final_frontmatter:
-                del final_frontmatter[field]
+            if field in metadata_to_save:
+                del metadata_to_save[field]
 
         # Enregistre toujours les métadonnées / Always save metadata
         save_file(os.path.join(doc_dir, "metadata.json"), 
-                  json.dumps(final_frontmatter, indent=2, ensure_ascii=False))
+                  json.dumps(metadata_to_save, indent=2, ensure_ascii=False))
 
         time.sleep(0.1)
 
@@ -631,6 +641,19 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
                 backend=backend,
                 order=i
             )
+
+        # 6. Configuration du backend si c'est le document racine de l'appel
+        # Backend configuration if it's the root document of the call
+        # On le fait APRÈS avoir traité les enfants pour savoir quels fichiers existent (drafts)
+        # We do it AFTER processing children to know which files exist (drafts)
+        if is_root and backend:
+            # On remonte d'un cran par rapport à 'source'
+            # Go up one level from 'source'
+            base_content_dir = os.path.dirname(parent_output_dir)
+            if backend.lower() == "zensical":
+                # L'URL racine est l'URL du premier document
+                root_docs_url = f"{base_url}/docs/{doc_id}/"
+                setup_zensical_backend(base_content_dir, final_frontmatter, title, root_docs_url=root_docs_url, tree=children_list)
 
     except Exception as e:
         logger.error(f"Erreur avec le document {doc_id} : {e}")

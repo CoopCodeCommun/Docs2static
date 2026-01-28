@@ -63,6 +63,29 @@ uv run python3 main.py --deploy
 - `-b, --backend` : Spécifier le backend (ex: `zensical`).
 - `-d, --deploy` : Déployer sans retélécharger les fichiers.
 
+### 📝 Gestion des contenus (Métadonnées)
+
+Docs2Static utilise le "frontmatter" (bloc entre deux lignes `---` au début du document) pour enrichir vos pages.
+
+#### Brouillons (Drafts)
+Pour masquer une page du site final :
+- Ajoutez `brouillon: oui` ou `draft: true` dans les métadonnées.
+- Le document et tous ses enfants seront ignorés lors du téléchargement.
+
+#### Métadonnées supportées :
+| Clé (FR/EN) | Usage |
+| :--- | :--- |
+| `résumé` / `summary` / `description` | Description du site (si sur le parent) ou extrait de la page. |
+| `auteur·ice` / `author` | Nom affiché comme auteur du site et dans le copyright. |
+| `licence` / `license` | Type de licence affiché dans le copyright (ex: CC-BY-SA). |
+| `titre` / `title` | Titre de la page (écrase le titre Docs). Utilisé pour le nom du dossier et le titre H1. |
+| `date` | Date du document (format AAAA-MM-JJ). |
+
+#### Astuces :
+- **Logo** : La première image insérée dans votre document Docs parent sera automatiquement utilisée comme logo du site.
+- **Ordre** : L'ordre des pages sur Docs est conservé dans le menu de navigation du site statique.
+- **Bouton Édition** : Chaque page dispose d'un bouton "Edit this page" pointant vers l'URL Docs originale.
+
 ### 🧪 Tests
 
 Pour vérifier que tout fonctionne correctement avec des données réelles :
@@ -135,6 +158,29 @@ uv run python3 main.py --deploy
 - `--no-cache`: Force download without using local cache.
 - `-b, --backend`: Specify the backend (e.g., `zensical`).
 - `-d, --deploy`: Deploy without re-downloading files.
+
+### 📝 Content Management (Metadata)
+
+Docs2Static uses "frontmatter" (a block between two `---` lines at the beginning of the document) to enrich your pages.
+
+#### Drafts
+To hide a page from the final site:
+- Add `draft: true` or `brouillon: oui` in the metadata.
+- The document and all its children will be ignored during download.
+
+#### Supported Metadata:
+| Key (EN/FR) | Usage |
+| :--- | :--- |
+| `summary` / `description` / `résumé` | Site description (if on the parent) or page excerpt. |
+| `author` / `auteur·ice` | Name displayed as the site author and in the copyright. |
+| `license` / `licence` | Type of license displayed in the copyright (e.g., CC-BY-SA). |
+| `title` / `titre` | Page title (overrides Docs title). Used for folder naming and H1 title. |
+| `date` | Document date (YYYY-MM-DD format). |
+
+#### Tips:
+- **Logo**: The first image inserted in your root Docs document will automatically be used as the site logo.
+- **Order**: The order of pages on Docs is preserved in the static site navigation menu.
+- **Edit Button**: Each page has an "Edit this page" button pointing back to the original Docs URL.
 
 ### 🧪 Testing
 
