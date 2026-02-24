@@ -59,6 +59,9 @@ Génère le site statique et l'envoie sur la branche `gh-pages` :
 uv run python3 main.py --deploy
 ```
 
+#### Architecture
+Pour plus de détails sur le fonctionnement interne, consultez le [Guide d'Architecture](guideline.md).
+
 #### Options disponibles :
 - `-f, --format` : Choisir le format (`html`, `markdown` ou `both`).
 - `--no-cache` : Forcer le téléchargement sans utiliser le cache local.
@@ -157,6 +160,9 @@ Generates the static site and pushes it to the `gh-pages` branch:
 ```bash
 uv run python3 main.py --deploy
 ```
+
+#### Architecture
+For more details on internal mechanics, check the [Architecture Guide](guideline.md) (in French).
 
 #### Available options:
 - `-f, --format`: Choose the format (`html`, `markdown`, or `both`).
