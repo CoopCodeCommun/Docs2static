@@ -15,7 +15,7 @@ import colorlog
 from typing import Dict, Any, List, Tuple
 
 # Import des backends / Backend imports
-from zensical_backend import setup_zensical_backend, deploy_zensical, slugify
+from docs2static.zensical_backend import setup_zensical_backend, deploy_zensical, slugify
 
 def setup_logger():
     """
@@ -575,28 +575,32 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         if clean_html:
             save_file(os.path.join(doc_dir, "index.html"), clean_html)
         
+        # Ajout de l'URL d'édition aux métadonnées pour Zensical
+        # Add the edit URL to metadata for Zensical
+        final_frontmatter["edit_url"] = f"{base_url}/docs/{doc_id}/"
+
+        # Reconstruit le bloc frontmatter en Markdown pour index.md
+        # On crée toujours un index.md, même si le contenu est vide,
+        # pour que Zensical puisse construire la navigation des sections.
+        # Rebuild the Markdown frontmatter block for index.md
+        # Always create an index.md, even if content is empty,
+        # so Zensical can build section navigation.
+        md_with_fm = "---\n"
+        for key, value in final_frontmatter.items():
+            # On évite de mettre des objets complexes si il y en a
+            # Avoid adding complex objects if any
+            if isinstance(value, (str, int, float)):
+                md_with_fm += f"{key}: {value}\n"
+        md_with_fm += "---\n\n"
+
+        # Ajout du titre en tant que titre H1 au début du contenu
+        # Add the title as H1 heading at the beginning of the content
+        md_with_fm += f"# {title}\n\n"
+
         if clean_md:
-            # Ajout de l'URL d'édition aux métadonnées pour Zensical
-            # Add the edit URL to metadata for Zensical
-            final_frontmatter["edit_url"] = f"{base_url}/docs/{doc_id}/"
-            
-            # Reconstruit le bloc frontmatter en Markdown pour index.md
-            # Rebuild the Markdown frontmatter block for index.md
-            md_with_fm = "---\n"
-            for key, value in final_frontmatter.items():
-                # On évite de mettre des objets complexes si il y en a
-                # Avoid adding complex objects if any
-                if isinstance(value, (str, int, float)):
-                    md_with_fm += f"{key}: {value}\n"
-            md_with_fm += "---\n\n"
-            
-            # Ajout du titre en tant que titre H1 au début du contenu
-            # Add the title as H1 heading at the beginning of the content
-            md_with_fm += f"# {title}\n\n"
-            
             md_with_fm += clean_md
-            
-            save_file(os.path.join(doc_dir, "index.md"), md_with_fm)
+
+        save_file(os.path.join(doc_dir, "index.md"), md_with_fm)
         
         # 4.6 Nettoyage et sauvegarde des métadonnées
         # Metadata cleanup and saving
@@ -760,9 +764,25 @@ def main():
         # Nettoyage du dossier source avant le nouveau téléchargement
         # Cleaning the source folder before the new download
         source_dir = "content/source"
+        # Dossiers à préserver lors du nettoyage (fichiers custom non générés)
+        # Directories to preserve during cleanup (custom non-generated files)
+        PRESERVE_DIRS = {"stylesheets", "overrides"}
+        def clean_dir_preserve(path):
+            """Supprime récursivement le contenu sauf les dossiers dans PRESERVE_DIRS."""
+            for item in os.listdir(path):
+                item_path = os.path.join(path, item)
+                if item in PRESERVE_DIRS:
+                    continue
+                if os.path.isdir(item_path):
+                    clean_dir_preserve(item_path)
+                    # Supprimer le dossier s'il est vide après nettoyage
+                    if not os.listdir(item_path):
+                        os.rmdir(item_path)
+                else:
+                    os.remove(item_path)
         if os.path.exists(source_dir):
             logger.info(f"Nettoyage du dossier source : {source_dir}")
-            shutil.rmtree(source_dir)
+            clean_dir_preserve(source_dir)
 
         # Pour chaque adresse donnée / For each given address
         for i, url in enumerate(args.urls):

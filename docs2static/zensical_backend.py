@@ -4,6 +4,7 @@ import subprocess
 import shutil
 import logging
 import unicodedata
+import importlib.resources
 from typing import Dict, Any, List
 
 # On récupère le logger configuré dans le main
@@ -98,41 +99,55 @@ def format_nav_to_toml(nav_list, base_docs_dir, indent=4):
     else:
         return f"nav = [\n    {content}\n]"
 
+def find_matching_bracket(text: str, start: int) -> int:
+    """
+    Trouve le crochet fermant correspondant au crochet ouvrant à la position start.
+    Finds the closing bracket matching the opening bracket at position start.
+    """
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == '[':
+            depth += 1
+        elif text[i] == ']':
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
 def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, root_docs_url: str = None, tree: List[Dict[str, Any]] = None):
     """
     Configure Zensical pour le dossier donné.
-    Généré seulement s'il n'existe pas déjà.
+    Initialise le projet si nécessaire, puis met à jour la navigation et les métadonnées.
     Configures Zensical for the given directory.
-    Generated only if it doesn't already exist.
+    Initializes the project if needed, then updates navigation and metadata.
     """
     zensical_toml = os.path.join(base_dir, "zensical.toml")
-    
-    # Si le fichier existe déjà, on ne touche à rien
-    # If the file already exists, we do nothing
-    if os.path.exists(zensical_toml):
-        logger.info(f"Le fichier {zensical_toml} existe déjà, skipping configuration.")
-        return
 
-    # 1. Lance 'zensical new'
-    # Run 'zensical new'
-    logger.info(f"Initialisation de Zensical dans {base_dir}...")
-    try:
-        # On crée le dossier s'il n'existe pas / Create directory if it doesn't exist
-        os.makedirs(base_dir, exist_ok=True)
-        # On lance la commande zensical new / Run the zensical new command
-        # On utilise 'uv run' pour être sûr d'avoir les dépendances
-        subprocess.run(["uv", "run", "zensical", "new", base_dir], check=True, capture_output=True)
-        
-        # Zensical new crée un dossier 'docs' par défaut. 
-        # Comme on utilise 'source', on peut soit renommer 'source' en 'docs' 
-        # soit changer la config de zensical. Ici on va garder 'source' 
-        # et on va supprimer le dossier 'docs' vide créé par zensical new.
-        docs_dir = os.path.join(base_dir, "docs")
-        if os.path.exists(docs_dir):
-            shutil.rmtree(docs_dir)
-    except Exception as e:
-        logger.error(f"Erreur lors de l'initialisation de Zensical : {e}")
-        return
+    # Si le fichier n'existe pas encore, on initialise le projet Zensical
+    # If the file doesn't exist yet, initialize the Zensical project
+    if not os.path.exists(zensical_toml):
+        # 1. Lance 'zensical new'
+        # Run 'zensical new'
+        logger.info(f"Initialisation de Zensical dans {base_dir}...")
+        try:
+            # On crée le dossier s'il n'existe pas / Create directory if it doesn't exist
+            os.makedirs(base_dir, exist_ok=True)
+            # On lance la commande zensical new / Run the zensical new command
+            # On utilise 'uv run' pour être sûr d'avoir les dépendances
+            subprocess.run(["uv", "run", "zensical", "new", base_dir], check=True, capture_output=True)
+
+            # Zensical new crée un dossier 'docs' par défaut.
+            # Comme on utilise 'source', on peut soit renommer 'source' en 'docs'
+            # soit changer la config de zensical. Ici on va garder 'source'
+            # et on va supprimer le dossier 'docs' vide créé par zensical new.
+            docs_dir = os.path.join(base_dir, "docs")
+            if os.path.exists(docs_dir):
+                shutil.rmtree(docs_dir)
+        except Exception as e:
+            logger.error(f"Erreur lors de l'initialisation de Zensical : {e}")
+            return
+    else:
+        logger.info(f"Le fichier {zensical_toml} existe déjà, mise à jour de la navigation...")
 
     # 2. Met à jour zensical.toml avec les métadonnées
     # Update zensical.toml with metadata
@@ -192,10 +207,19 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             if tree:
                 nav_list = build_nav_structure(tree, base_docs_dir)
                 nav_toml = format_nav_to_toml(nav_list, base_docs_dir)
-                if re.search(r'#?\s*nav\s*=', toml_content):
-                    # Remplace une navigation existante (commentée ou non)
-                    # Replace existing navigation (commented or not)
-                    toml_content = re.sub(r'#?\s*nav\s*=\s*\[.*?\]', nav_toml, toml_content, flags=re.DOTALL)
+                # Cherche le bloc nav existant (non commenté, en début de ligne)
+                # Find existing nav block (not commented, at start of line)
+                nav_match = re.search(r'^nav\s*=\s*\[', toml_content, re.MULTILINE)
+                if nav_match:
+                    # Trouve le crochet fermant correspondant (gère les crochets imbriqués)
+                    # Find matching closing bracket (handles nested brackets)
+                    bracket_start = nav_match.start() + toml_content[nav_match.start():].index('[')
+                    bracket_end = find_matching_bracket(toml_content, bracket_start)
+                    if bracket_end != -1:
+                        toml_content = toml_content[:nav_match.start()] + nav_toml + toml_content[bracket_end + 1:]
+                    else:
+                        logger.warning("Impossible de trouver la fin du bloc nav, remplacement simple.")
+                        toml_content = toml_content[:nav_match.start()] + nav_toml
                 else:
                     # Ajoute sous la section [project] / Add under [project] section
                     toml_content = toml_content.replace('[project]', f'[project]\n{nav_toml}')
@@ -266,6 +290,44 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
                     else:
                         # On l'insère juste après la section [project.theme.icon]
                         toml_content = toml_content.replace(icon_section, f'{icon_section}\n{replacement}')
+
+            # Copie des assets embarqués (overrides + stylesheets)
+            # Copy embedded assets (overrides + stylesheets)
+            assets_dir = importlib.resources.files("docs2static") / "assets"
+
+            # Copie overrides/ → content/overrides/
+            overrides_dst = os.path.join(base_dir, "overrides")
+            os.makedirs(overrides_dst, exist_ok=True)
+            for f_name in ("main.html",):
+                src = assets_dir / "overrides" / f_name
+                dst = os.path.join(overrides_dst, f_name)
+                if not os.path.exists(dst):
+                    with importlib.resources.as_file(src) as src_path:
+                        shutil.copy2(src_path, dst)
+                    logger.info(f"Asset copié : {dst}")
+
+            # Copie stylesheets/ → content/source/{slug}/stylesheets/
+            stylesheets_dst = os.path.join(base_docs_dir, "stylesheets")
+            os.makedirs(stylesheets_dst, exist_ok=True)
+            for f_name in ("home.css",):
+                src = assets_dir / "stylesheets" / f_name
+                dst = os.path.join(stylesheets_dst, f_name)
+                if not os.path.exists(dst):
+                    with importlib.resources.as_file(src) as src_path:
+                        shutil.copy2(src_path, dst)
+                    logger.info(f"Asset copié : {dst}")
+
+            # Active custom_dir et extra_css dans le toml
+            # Enable custom_dir and extra_css in toml
+            if re.search(r'#\s*custom_dir\s*=', toml_content):
+                toml_content = re.sub(r'#\s*custom_dir\s*=\s*".*?"', 'custom_dir = "overrides"', toml_content)
+            elif 'custom_dir' not in toml_content:
+                toml_content = toml_content.replace('[project.theme]', '[project.theme]\ncustom_dir = "overrides"')
+
+            if re.search(r'#\s*extra_css\s*=', toml_content):
+                toml_content = re.sub(r'#\s*extra_css\s*=\s*\[.*?\]', 'extra_css = ["stylesheets/home.css"]', toml_content)
+            elif 'extra_css' not in toml_content:
+                toml_content = toml_content.replace('[project]', '[project]\nextra_css = ["stylesheets/home.css"]')
 
             with open(zensical_toml, "w", encoding="utf-8") as f:
                 f.write(toml_content)

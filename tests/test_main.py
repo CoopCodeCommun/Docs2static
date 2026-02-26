@@ -5,8 +5,8 @@ import shutil
 import json
 import sys
 import re
-import main
-from main import logger
+from docs2static import main
+from docs2static.main import logger
 
 class TestDocs2Static(unittest.TestCase):
     """
