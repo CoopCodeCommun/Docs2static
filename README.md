@@ -2,7 +2,7 @@
 
 Transforme des documents collaboratifs [Docs](https://docs.suite.anct.gouv.fr/) en site statique avec [Zensical](https://zensical.org/). Homepage stylisee incluse.
 
-**Exemple :** [Document source](https://notes.liiib.re/docs/778c5d28-cc11-4692-a17e-8e59c94c904a/) -> [Site genere](https://nasjoe.github.io/zendocs_test/)
+**Exemple :** [Document source](https://notes.liiib.re/docs/fa5583b2-37fc-4016-998f-f5237fd41642/) -> [Site genere](https://CoopCodeCommun.github.io/Docs2static/)
 
 ## Installation
 
@@ -36,6 +36,16 @@ Variables dans le `.env` :
 | `GITLAB_REPO` | Adresse SSH du depot GitLab (alternative) |
 | `BACKEND` | Moteur statique (par defaut : `zensical`) |
 | `TEMPLATE` | Template homepage (par defaut : `phantom`) |
+
+### Exemple concret
+
+Le `.env` suivant produit le site [CoopCodeCommun.github.io/Docs2static](https://CoopCodeCommun.github.io/Docs2static/) :
+
+```bash
+DOCS_URL=https://notes.liiib.re/docs/fa5583b2-37fc-4016-998f-f5237fd41642/
+GITHUB_REPO=https://github.com/CoopCodeCommun/Docs2static
+BACKEND=zensical
+```
 
 ## Usage CLI
 
