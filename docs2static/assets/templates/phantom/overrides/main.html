@@ -1,5 +1,27 @@
 {% extends "base.html" %}
 
+{% block extrahead %}
+{% set page_title = page.meta.title or config.site_name %}
+{% set page_desc = page.meta.summary or page.meta.excerpt or config.site_description %}
+{% set page_image = page.meta.hero_image or page.meta.image or "" %}
+{% set page_url = page.canonical_url or "" %}
+{% set base_url = config.site_url or "" %}
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ page_title }}">
+<meta property="og:description" content="{{ page_desc }}">
+{% if page_url %}<meta property="og:url" content="{{ page_url }}">{% endif %}
+{% if page_image and base_url %}<meta property="og:image" content="{{ base_url }}{{ page_image }}">{% endif %}
+{% if config.site_name %}<meta property="og:site_name" content="{{ config.site_name }}">{% endif %}
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ page_title }}">
+<meta name="twitter:description" content="{{ page_desc }}">
+{% if page_image and base_url %}<meta name="twitter:image" content="{{ base_url }}{{ page_image }}">{% endif %}
+{% endblock %}
+
 {% block content %}
 {% if page.url == "" %}
 
@@ -96,6 +118,12 @@
   {% endfor %}
 </section>
 </div>
+
+{% if page.meta and page.meta.iframe %}
+<div class="iframe-embed">
+  <iframe {{ page.meta.iframe }}></iframe>
+</div>
+{% endif %}
 
 {% else %}
 {{ super() }}

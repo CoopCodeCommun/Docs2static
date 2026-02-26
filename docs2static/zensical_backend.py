@@ -178,6 +178,21 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
                 else:
                     toml_content = toml_content.replace('[project]', f'[project]\nrepo_url = "{root_docs_url}"')
 
+            # site_url (dérivé du dépôt GitHub/GitLab)
+            # site_url (derived from GitHub/GitLab repo)
+            repo_for_url = os.getenv("GITHUB_REPO") or os.getenv("GITLAB_REPO") or ""
+            site_url = get_pages_url(repo_for_url)
+            if site_url:
+                if re.search(r'#?\s*site_url\s*=', toml_content):
+                    toml_content = re.sub(r'#?\s*site_url\s*=\s*".*?"', f'site_url = "{site_url}"', toml_content)
+                else:
+                    toml_content = toml_content.replace('[project]', f'[project]\nsite_url = "{site_url}"')
+
+            # language (depuis metadata ou fallback "fr")
+            # language (from metadata or fallback "fr")
+            language = metadata.get("langue") or metadata.get("language") or "fr"
+            toml_content = re.sub(r'language\s*=\s*".*?"', f'language = "{language}"', toml_content)
+
             # copyright
             license_val = metadata.get("licence") or metadata.get("license")
             author_val = metadata.get("auteur·ice") or metadata.get("author") or "The authors"

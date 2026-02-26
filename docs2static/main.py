@@ -568,6 +568,12 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         if "iframe" in final_frontmatter:
             final_frontmatter["iframe"] = re.sub(r'<(https?://[^>]+)>', r'\1', final_frontmatter["iframe"])
 
+        # 3.576 Nettoyage <> Markdown dans résumé/summary/description
+        # Clean Markdown <> around URLs in summary fields
+        for key in ("résumé", "summary", "description"):
+            if key in final_frontmatter and isinstance(final_frontmatter[key], str):
+                final_frontmatter[key] = re.sub(r'<(https?://[^>]+)>', r'\1', final_frontmatter[key])
+
         # 3.58 Extraction excerpt (début du texte markdown)
         # Extract first text paragraph from markdown body for tile descriptions
         if clean_md and "excerpt" not in final_frontmatter:
