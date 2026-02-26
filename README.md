@@ -35,6 +35,7 @@ Variables dans le `.env` :
 | `GITHUB_REPO` | Adresse SSH du depot GitHub (ex: `git@github.com:User/Repo.git`) |
 | `GITLAB_REPO` | Adresse SSH du depot GitLab (alternative) |
 | `BACKEND` | Moteur statique (par defaut : `zensical`) |
+| `TEMPLATE` | Template homepage (par defaut : `phantom`) |
 
 ## Usage CLI
 
@@ -121,6 +122,18 @@ TEMPLATE=phantom
 ```
 
 Les templates sont stockes dans `docs2static/assets/templates/{nom}/` avec les sous-dossiers `overrides/` et `stylesheets/`.
+
+### Iframe embarque
+
+Pour integrer un contenu externe (agenda, formulaire, etc.), ajoutez une cle `iframe` dans le frontmatter :
+
+```yaml
+---
+iframe: src="https://example.com/embed/" width="100%" height="1000px"
+---
+```
+
+L'iframe sera affichee sous le contenu de la page.
 
 ## Deploiement en production
 
