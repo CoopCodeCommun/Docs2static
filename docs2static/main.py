@@ -534,6 +534,59 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             clean_md, md_logo = download_and_replace_images(clean_md, doc_dir, "markdown")
             logo_filename = logo_filename or md_logo
         
+        # 3.55 Extraction image depuis le markdown (si pas déjà dans frontmatter)
+        # Extract image from markdown (if not already in frontmatter)
+        if clean_md and "image" not in final_frontmatter:
+            img_match = re.search(r'!\[.*?\]\(([^)]+)\)', clean_md)
+            if img_match:
+                final_frontmatter["image"] = img_match.group(1)
+
+        # 3.555 Extraction hero_image (2e image du markdown)
+        # Extract hero_image (2nd image from markdown)
+        if clean_md and "hero_image" not in final_frontmatter:
+            all_images = re.findall(r'!\[.*?\]\(([^)]+)\)', clean_md)
+            if len(all_images) >= 2:
+                final_frontmatter["hero_image"] = all_images[1]
+
+        # 3.56 Normalisation des tags (liste) / Normalize tags (list)
+        tags_raw = (final_frontmatter.get("tags")
+                    or final_frontmatter.get("mots-clés")
+                    or final_frontmatter.get("mots-cles")
+                    or final_frontmatter.get("keywords"))
+        if tags_raw and isinstance(tags_raw, str):
+            final_frontmatter["tags"] = [t.strip() for t in tags_raw.split(",") if t.strip()]
+            # Nettoie les anciennes clés / Clean old keys
+            for old_key in ("mots-clés", "mots-cles", "keywords"):
+                final_frontmatter.pop(old_key, None)
+
+        # 3.57 Normalisation summary / Normalize summary
+        if "résumé" in final_frontmatter and "summary" not in final_frontmatter:
+            final_frontmatter["summary"] = final_frontmatter["résumé"]
+
+        # 3.575 Nettoyage iframe (retire les <> Markdown autour des URLs)
+        # Clean iframe value (remove Markdown <> around URLs)
+        if "iframe" in final_frontmatter:
+            final_frontmatter["iframe"] = re.sub(r'<(https?://[^>]+)>', r'\1', final_frontmatter["iframe"])
+
+        # 3.58 Extraction excerpt (début du texte markdown)
+        # Extract first text paragraph from markdown body for tile descriptions
+        if clean_md and "excerpt" not in final_frontmatter:
+            excerpt_lines = []
+            for line in clean_md.split("\n"):
+                stripped = line.strip()
+                # Skip headings, images, empty lines, links-only lines
+                if not stripped or stripped.startswith("#") or stripped.startswith("!") or stripped.startswith("---"):
+                    if excerpt_lines:
+                        break  # End of first paragraph
+                    continue
+                excerpt_lines.append(stripped)
+            if excerpt_lines:
+                excerpt_text = " ".join(excerpt_lines)
+                # Truncate to ~160 chars at word boundary
+                if len(excerpt_text) > 160:
+                    excerpt_text = excerpt_text[:160].rsplit(" ", 1)[0] + "…"
+                final_frontmatter["excerpt"] = excerpt_text
+
         # 3.6 Vérification du statut brouillon / Draft status check
         # Si le document est marqué comme brouillon, on ne l'enregistre pas
         # If the document is marked as draft, we don't save it
@@ -587,9 +640,13 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # so Zensical can build section navigation.
         md_with_fm = "---\n"
         for key, value in final_frontmatter.items():
-            # On évite de mettre des objets complexes si il y en a
-            # Avoid adding complex objects if any
-            if isinstance(value, (str, int, float)):
+            # Supporte les listes (tags) et les scalaires
+            # Supports lists (tags) and scalars
+            if isinstance(value, list):
+                md_with_fm += f"{key}:\n"
+                for item in value:
+                    md_with_fm += f"  - {item}\n"
+            elif isinstance(value, (str, int, float)):
                 md_with_fm += f"{key}: {value}\n"
         md_with_fm += "---\n\n"
 
@@ -657,7 +714,10 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             if backend.lower() == "zensical":
                 # L'URL racine est l'URL du premier document
                 root_docs_url = f"{base_url}/docs/{doc_id}/"
-                setup_zensical_backend(base_content_dir, final_frontmatter, title, root_docs_url=root_docs_url, tree=children_list)
+                # Template depuis le frontmatter, variable d'env ou fallback "phantom"
+                # Template from frontmatter, env var, or fallback "phantom"
+                template_name = final_frontmatter.get("template") or os.getenv("TEMPLATE") or "phantom"
+                setup_zensical_backend(base_content_dir, final_frontmatter, title, root_docs_url=root_docs_url, tree=children_list, template_name=template_name)
 
     except Exception as e:
         logger.error(f"Erreur avec le document {doc_id} : {e}")

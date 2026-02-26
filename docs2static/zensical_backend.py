@@ -114,7 +114,7 @@ def find_matching_bracket(text: str, start: int) -> int:
                 return i
     return -1
 
-def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, root_docs_url: str = None, tree: List[Dict[str, Any]] = None):
+def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, root_docs_url: str = None, tree: List[Dict[str, Any]] = None, template_name: str = "phantom"):
     """
     Configure Zensical pour le dossier donné.
     Initialise le projet si nécessaire, puis met à jour la navigation et les métadonnées.
@@ -291,9 +291,9 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
                         # On l'insère juste après la section [project.theme.icon]
                         toml_content = toml_content.replace(icon_section, f'{icon_section}\n{replacement}')
 
-            # Copie des assets embarqués (overrides + stylesheets)
-            # Copy embedded assets (overrides + stylesheets)
-            assets_dir = importlib.resources.files("docs2static") / "assets"
+            # Copie des assets embarqués depuis templates/{template_name}/
+            # Copy embedded assets from templates/{template_name}/
+            assets_dir = importlib.resources.files("docs2static") / "assets" / "templates" / template_name
 
             # Copie overrides/ → content/overrides/
             overrides_dst = os.path.join(base_dir, "overrides")
@@ -301,10 +301,9 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             for f_name in ("main.html",):
                 src = assets_dir / "overrides" / f_name
                 dst = os.path.join(overrides_dst, f_name)
-                if not os.path.exists(dst):
-                    with importlib.resources.as_file(src) as src_path:
-                        shutil.copy2(src_path, dst)
-                    logger.info(f"Asset copié : {dst}")
+                with importlib.resources.as_file(src) as src_path:
+                    shutil.copy2(src_path, dst)
+                logger.info(f"Asset copié : {dst}")
 
             # Copie stylesheets/ → content/source/{slug}/stylesheets/
             stylesheets_dst = os.path.join(base_docs_dir, "stylesheets")
@@ -312,10 +311,9 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             for f_name in ("home.css",):
                 src = assets_dir / "stylesheets" / f_name
                 dst = os.path.join(stylesheets_dst, f_name)
-                if not os.path.exists(dst):
-                    with importlib.resources.as_file(src) as src_path:
-                        shutil.copy2(src_path, dst)
-                    logger.info(f"Asset copié : {dst}")
+                with importlib.resources.as_file(src) as src_path:
+                    shutil.copy2(src_path, dst)
+                logger.info(f"Asset copié : {dst}")
 
             # Active custom_dir et extra_css dans le toml
             # Enable custom_dir and extra_css in toml

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if page.url == "" %}
+
+{# === HERO === #}
+{% if page.meta and page.meta.hero_image %}
+<div class="home-hero home-hero--bg" style="background-image: url('{{ page.meta.hero_image }}');">
+{% else %}
+<div class="home-hero">
+{% endif %}
+  {% if page.meta and page.meta.logo_file %}
+    <img class="home-hero__logo" src="{{ page.meta.logo_file }}" alt="{{ config.site_name }}">
+  {% endif %}
+
+  <h1 class="home-title">{{ config.site_name }}</h1>
+
+  {% if page.meta and page.meta.summary %}
+    <p class="home-subtitle">{{ page.meta.summary }}</p>
+  {% elif config.site_description %}
+    <p class="home-subtitle">{{ config.site_description }}</p>
+  {% endif %}
+
+</div>
+
+{# === TILES (enfants directs, style Phantom) === #}
+{% set tile_count = namespace(n=0) %}
+<div class="home-tiles-wrapper">
+<section class="home-tiles">
+  {% set style_classes = ["style1", "style2", "style3", "style4", "style5", "style6"] %}
+  {% for section in nav.items %}
+    {% if section.children %}
+      {% set idx = section.children | first %}
+      {% set meta = idx.meta if idx and idx.meta else {} %}
+      <article class="home-tile {{ style_classes[tile_count.n % 6] }}">
+        {% if meta.image %}
+          <span class="home-tile__image">
+            <img src="{{ (idx.url | url) ~ meta.image }}" alt="{{ section.title }}">
+          </span>
+        {% else %}
+          <span class="home-tile__image home-tile__image--placeholder"></span>
+        {% endif %}
+        <a href="{{ idx.url | url }}">
+          <h2>{{ section.title }}</h2>
+          <div class="home-tile__content">
+            {% if meta.excerpt %}
+              <p>{{ meta.excerpt }}</p>
+            {% elif meta.summary %}
+              <p>{{ meta.summary }}</p>
+            {% endif %}
+            {% if meta.tags %}
+              <div class="home-tile__tags">
+                {% for tag in meta.tags %}
+                  <span class="home-tag home-tag--small">{{ tag }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </a>
+      </article>
+      {% set tile_count.n = tile_count.n + 1 %}
+    {% elif section.url and section.url != "" %}
+      {# Page simple sans sous-arbre #}
+      {% set tile_meta = section.meta if section.meta else {} %}
+      {% set tile_url = section.url | url %}
+      {% if tile_url %}
+      <article class="home-tile {{ style_classes[tile_count.n % 6] }}">
+        {% if tile_meta.image %}
+          <span class="home-tile__image">
+            <img src="{{ tile_url ~ tile_meta.image }}" alt="{{ section.title }}">
+          </span>
+        {% else %}
+          <span class="home-tile__image home-tile__image--placeholder"></span>
+        {% endif %}
+        <a href="{{ tile_url }}">
+          <h2>{{ section.title }}</h2>
+          <div class="home-tile__content">
+            {% if tile_meta.excerpt %}
+              <p>{{ tile_meta.excerpt }}</p>
+            {% elif tile_meta.summary %}
+              <p>{{ tile_meta.summary }}</p>
+            {% endif %}
+            {% if tile_meta.tags %}
+              <div class="home-tile__tags">
+                {% for tag in tile_meta.tags %}
+                  <span class="home-tag home-tag--small">{{ tag }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </a>
+      </article>
+      {% set tile_count.n = tile_count.n + 1 %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+</section>
+</div>
+
+{% else %}
+{{ super() }}
+{% if page.meta and page.meta.iframe %}
+<div class="iframe-embed">
+  <iframe {{ page.meta.iframe }}></iframe>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

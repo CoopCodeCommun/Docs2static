@@ -84,6 +84,44 @@ date: 2026-01-15
 | `brouillon` / `draft` | `oui` / `true` = page et enfants ignores |
 | `date` | Date du document (AAAA-MM-JJ) |
 
+## Homepage et templates
+
+### Convention images
+
+Dans le document racine Docs :
+
+- **1re image** → logo du site (`logo_file` dans les metadonnees)
+- **2e image** → image hero de fond (`hero_image` dans les metadonnees)
+
+### Frontmatter auto-enrichi
+
+Docs2Static extrait automatiquement ces champs si absents du frontmatter :
+
+| Champ | Source |
+|-------|--------|
+| `image` | 1re image du contenu |
+| `hero_image` | 2e image du contenu |
+| `excerpt` | 1er paragraphe de texte (tronque a 160 caracteres) |
+
+### Templates
+
+Le template par defaut est `phantom` (inspire de [HTML5UP Phantom](https://html5up.net/phantom)). La homepage est generee dynamiquement depuis l'arbre de navigation : chaque section enfant devient une tuile coloree avec image, titre et extrait.
+
+Pour changer de template :
+
+```yaml
+# Dans le frontmatter du document racine
+template: phantom
+```
+
+Ou via variable d'environnement :
+
+```bash
+TEMPLATE=phantom
+```
+
+Les templates sont stockes dans `docs2static/assets/templates/{nom}/` avec les sous-dossiers `overrides/` et `stylesheets/`.
+
 ## Deploiement en production
 
 ### GitHub Actions
@@ -175,7 +213,10 @@ echo "0 6 * * * cd /opt/docs && docs2static && docs2static --deploy" | crontab -
 docs2static/
   main.py                # Orchestration : API, arbre, frontmatter, images
   zensical_backend.py    # Integration Zensical : navigation, toml, deploiement
-  assets/                # Template homepage + CSS embarques
+  assets/templates/      # Templates homepage (phantom, etc.)
+    phantom/
+      overrides/         # Surcharge du theme Zensical (main.html)
+      stylesheets/       # CSS homepage (home.css)
 ```
 
 Pipeline : Docs API -> arbre -> frontmatter -> images -> Markdown -> Zensical build -> deploy
