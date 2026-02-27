@@ -1,0 +1,18 @@
+{
+  "auteur·ice": "Coopérative Code Commun",
+  "langue": "fr",
+  "licence": "CC-BY-SA",
+  "catégorie": "Présentation",
+  "résumé": "des documents pour tester https://zensical.org/",
+  "brouillon": "non",
+  "logo": "9a08b49e-498f-49c9-a3ac-dcf1c9c59292.png",
+  "image": "70cd180e-e3fa-4e80-a79a-36ec46b11743.jpg",
+  "iframe": "src=\"https://www.google.com/maps/d/embed?mid=11ZprdKNf2j2ow8CdmMFjHb1eelaPvQE&ehbc=2E312F\" width=\"75%\" height=\"1000px\"",
+  "tags": [
+    "Zensical"
+  ],
+  "summary": "des documents pour tester https://zensical.org/",
+  "excerpt": "Ceci est le document parent du test zendocs",
+  "title": "ZenDocs : Parent",
+  "order": 0
+}
