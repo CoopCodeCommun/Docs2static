@@ -33,12 +33,12 @@
 
 {# === HERO === #}
 {% if page.meta and page.meta.image %}
-<div class="home-hero home-hero--bg" style="background-image: url('{{ page.meta.image }}');">
+<div class="home-hero home-hero--bg" role="banner" style="background-image: url('{{ page.meta.image }}');">
 {% else %}
-<div class="home-hero">
+<div class="home-hero" role="banner">
 {% endif %}
   {% if page.meta and page.meta.logo %}
-    <img class="home-hero__logo" src="{{ page.meta.logo }}" alt="{{ config.site_name }}">
+    <img class="home-hero__logo" src="{{ page.meta.logo }}" alt="">
   {% endif %}
 
   <h1 class="home-title">{{ config.site_name }}</h1>
@@ -51,15 +51,15 @@
 
 </div>
 
-{# === CONTENU MARKDOWN (corps de la page d'accueil) === #}
+{# === CONTENU MARKDOWN === #}
 <div class="home-body">
   {{ page.content }}
 </div>
 
-{# === TILES (enfants directs, style Phantom) === #}
+{# === TILES (sections enfants) === #}
 {% set tile_count = namespace(n=0) %}
-<div class="home-tiles-wrapper">
-<section class="home-tiles">
+<nav class="home-tiles-wrapper" aria-label="Sections du site">
+<div class="home-tiles">
   {% set style_classes = ["style1", "style2", "style3", "style4", "style5", "style6"] %}
   {% for section in nav.items %}
     {% if section.children %}
@@ -67,11 +67,11 @@
       {% set meta = idx.meta if idx and idx.meta else {} %}
       <article class="home-tile {{ style_classes[tile_count.n % 6] }}">
         {% if meta.image %}
-          <span class="home-tile__image">
-            <img src="{{ (idx.url | url) ~ meta.image }}" alt="{{ section.title }}">
+          <span class="home-tile__image" aria-hidden="true">
+            <img src="{{ (idx.url | url) ~ meta.image }}" alt="" loading="lazy">
           </span>
         {% else %}
-          <span class="home-tile__image home-tile__image--placeholder"></span>
+          <span class="home-tile__image home-tile__image--placeholder" aria-hidden="true"></span>
         {% endif %}
         <a href="{{ idx.url | url }}">
           <h2>{{ section.title }}</h2>
@@ -84,7 +84,7 @@
             {% if meta.tags %}
               <div class="home-tile__tags">
                 {% for tag in meta.tags %}
-                  <span class="home-tag home-tag--small">{{ tag }}</span>
+                  <span class="home-tag">{{ tag }}</span>
                 {% endfor %}
               </div>
             {% endif %}
@@ -93,17 +93,16 @@
       </article>
       {% set tile_count.n = tile_count.n + 1 %}
     {% elif section.url and section.url != "" %}
-      {# Page simple sans sous-arbre #}
       {% set tile_meta = section.meta if section.meta else {} %}
       {% set tile_url = section.url | url %}
       {% if tile_url %}
       <article class="home-tile {{ style_classes[tile_count.n % 6] }}">
         {% if tile_meta.image %}
-          <span class="home-tile__image">
-            <img src="{{ tile_url ~ tile_meta.image }}" alt="{{ section.title }}">
+          <span class="home-tile__image" aria-hidden="true">
+            <img src="{{ tile_url ~ tile_meta.image }}" alt="" loading="lazy">
           </span>
         {% else %}
-          <span class="home-tile__image home-tile__image--placeholder"></span>
+          <span class="home-tile__image home-tile__image--placeholder" aria-hidden="true"></span>
         {% endif %}
         <a href="{{ tile_url }}">
           <h2>{{ section.title }}</h2>
@@ -116,7 +115,7 @@
             {% if tile_meta.tags %}
               <div class="home-tile__tags">
                 {% for tag in tile_meta.tags %}
-                  <span class="home-tag home-tag--small">{{ tag }}</span>
+                  <span class="home-tag">{{ tag }}</span>
                 {% endfor %}
               </div>
             {% endif %}
@@ -127,12 +126,12 @@
       {% endif %}
     {% endif %}
   {% endfor %}
-</section>
 </div>
+</nav>
 
 {% if page.meta and page.meta.iframe %}
 <div class="iframe-embed">
-  <iframe {{ page.meta.iframe }}></iframe>
+  <iframe {{ page.meta.iframe }} title="Contenu intégré"></iframe>
 </div>
 {% endif %}
 
@@ -140,7 +139,7 @@
 {{ super() }}
 {% if page.meta and page.meta.iframe %}
 <div class="iframe-embed">
-  <iframe {{ page.meta.iframe }}></iframe>
+  <iframe {{ page.meta.iframe }} title="Contenu intégré"></iframe>
 </div>
 {% endif %}
 {% endif %}
