@@ -1,9 +1,15 @@
 {% extends "base.html" %}
 
 {% block extrahead %}
+{% if page.meta %}
 {% set page_title = page.meta.title or config.site_name %}
 {% set page_desc = page.meta.summary or page.meta.excerpt or config.site_description %}
-{% set page_image = page.meta.hero_image or page.meta.image or "" %}
+{% set page_image = page.meta.image or "" %}
+{% else %}
+{% set page_title = config.site_name %}
+{% set page_desc = config.site_description %}
+{% set page_image = "" %}
+{% endif %}
 {% set page_url = page.canonical_url or "" %}
 {% set base_url = config.site_url or "" %}
 
@@ -26,13 +32,13 @@
 {% if page.url == "" %}
 
 {# === HERO === #}
-{% if page.meta and page.meta.hero_image %}
-<div class="home-hero home-hero--bg" style="background-image: url('{{ page.meta.hero_image }}');">
+{% if page.meta and page.meta.image %}
+<div class="home-hero home-hero--bg" style="background-image: url('{{ page.meta.image }}');">
 {% else %}
 <div class="home-hero">
 {% endif %}
-  {% if page.meta and page.meta.logo_file %}
-    <img class="home-hero__logo" src="{{ page.meta.logo_file }}" alt="{{ config.site_name }}">
+  {% if page.meta and page.meta.logo %}
+    <img class="home-hero__logo" src="{{ page.meta.logo }}" alt="{{ config.site_name }}">
   {% endif %}
 
   <h1 class="home-title">{{ config.site_name }}</h1>
@@ -43,6 +49,11 @@
     <p class="home-subtitle">{{ config.site_description }}</p>
   {% endif %}
 
+</div>
+
+{# === CONTENU MARKDOWN (corps de la page d'accueil) === #}
+<div class="home-body">
+  {{ page.content }}
 </div>
 
 {# === TILES (enfants directs, style Phantom) === #}

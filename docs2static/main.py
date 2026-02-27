@@ -354,96 +354,94 @@ def save_file(file_path: str, content: str):
         f.write(content)
     logger.info(f"Fichier enregistré : {file_path}")
 
-def download_and_replace_images(content: str, doc_dir: str, content_type: str = "markdown") -> Tuple[str, str]:
+def download_and_replace_images(content: str, doc_dir: str, content_type: str = "markdown") -> str:
     """
-    Cherche les images, les télécharge et remplace les URLs par le fichier local.
-    Retourne le contenu modifié et éventuellement le nom du fichier logo trouvé.
-    Searches for images, downloads them, and replaces URLs with the local file.
-    Returns the modified content and optionally the logo filename found.
+    Cherche les images dans le contenu, les télécharge et remplace les URLs par le fichier local.
+    Searches for images in content, downloads them, and replaces URLs with the local file.
     """
     if not content:
-        return content, None
-
-    logo_filename = None
+        return content
 
     # On cherche les images Markdown : ![alt](url)
     # Search for Markdown images
     if content_type == "markdown":
-        # Regex pour trouver ![texte](url)
         pattern = r'!\[(.*?)\]\((https?://.*?)\)'
-        
+
         def md_replacer(match):
-            nonlocal logo_filename
             alt, url = match.groups()
             try:
-                # Extrait le nom du fichier / Extract filename
                 filename = os.path.basename(urllib.parse.urlparse(url).path)
                 if not filename: return match.group(0)
-                
+
                 local_path = os.path.join(doc_dir, filename)
                 os.makedirs(doc_dir, exist_ok=True)
-                
-                # Téléchargement via la session avec cache
-                # Download via cached session
+
                 img_res = session.get(url)
                 if img_res.status_code == 200:
                     with open(local_path, "wb") as f:
                         f.write(img_res.content)
                     source = "CACHE" if img_res.from_cache else "RÉSEAU"
                     logger.info(f"[{source}] Image localisée : {filename}")
-                    
-                    # On prend la première image rencontrée comme logo
-                    # We take the first image encountered as the logo
-                    if not logo_filename:
-                        logo_filename = filename
-                        
                     return f"![{alt}]({filename})"
                 return match.group(0)
             except Exception as e:
                 logger.error(f"Erreur image Markdown {url} : {e}")
                 return match.group(0)
-        
-        new_content = re.sub(pattern, md_replacer, content)
 
-        return new_content, logo_filename
+        return re.sub(pattern, md_replacer, content)
 
     # On cherche les images HTML : <img src="url">
     # Search for HTML images
     else:
-        # Regex pour trouver <img ... src="url" ...>
         pattern = r'<img\s+([^>]*?)src="(https?://.*?)"([^>]*?)>'
-        
+
         def html_replacer(match):
-            nonlocal logo_filename
             before, url, after = match.groups()
             try:
                 filename = os.path.basename(urllib.parse.urlparse(url).path)
                 if not filename: return match.group(0)
-                
+
                 local_path = os.path.join(doc_dir, filename)
                 os.makedirs(doc_dir, exist_ok=True)
-                
+
                 img_res = session.get(url)
                 if img_res.status_code == 200:
                     with open(local_path, "wb") as f:
                         f.write(img_res.content)
                     source = "CACHE" if img_res.from_cache else "RÉSEAU"
                     logger.info(f"[{source}] Image localisée : {filename}")
-                    
-                    # On prend la première image rencontrée comme logo
-                    # We take the first image encountered as the logo
-                    if not logo_filename:
-                        logo_filename = filename
-
                     return f'<img {before}src="{filename}"{after}>'
                 return match.group(0)
             except Exception as e:
                 logger.error(f"Erreur image HTML {url} : {e}")
                 return match.group(0)
-                
-        new_content = re.sub(pattern, html_replacer, content)
 
-        return new_content, logo_filename
+        return re.sub(pattern, html_replacer, content)
+
+
+def download_frontmatter_image(url: str, doc_dir: str) -> str:
+    """
+    Télécharge une image depuis une URL frontmatter et retourne le nom de fichier local.
+    Downloads an image from a frontmatter URL and returns the local filename.
+    """
+    if not url or not url.startswith("http"):
+        return url
+    try:
+        filename = os.path.basename(urllib.parse.urlparse(url).path)
+        if not filename:
+            return url
+        local_path = os.path.join(doc_dir, filename)
+        os.makedirs(doc_dir, exist_ok=True)
+        img_res = session.get(url)
+        if img_res.status_code == 200:
+            with open(local_path, "wb") as f:
+                f.write(img_res.content)
+            source = "CACHE" if img_res.from_cache else "RÉSEAU"
+            logger.info(f"[{source}] Image frontmatter localisée : {filename}")
+            return filename
+    except Exception as e:
+        logger.error(f"Erreur image frontmatter {url} : {e}")
+    return url
 
 def process_document(base_url: str, doc_id: str, parent_output_dir: str = "content/source", processed_ids: set = None, selected_format: str = "both", children_list: List[Dict[str, Any]] = None, backend: str = None, order: int = 0):
     """
@@ -525,30 +523,25 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # Chemin complet vers le dossier du document / Full path to the document folder
         doc_dir = os.path.join(parent_output_dir, folder_name)
         
-        # 3.5 Traitement des images / Image processing
-        logo_filename = None
+        # 3.5 Traitement des images du contenu / Content image processing
         if clean_html:
-            clean_html, html_logo = download_and_replace_images(clean_html, doc_dir, "html")
-            logo_filename = logo_filename or html_logo
+            clean_html = download_and_replace_images(clean_html, doc_dir, "html")
         if clean_md:
-            clean_md, md_logo = download_and_replace_images(clean_md, doc_dir, "markdown")
-            logo_filename = logo_filename or md_logo
-        
-        # 3.55 Extraction image depuis le markdown (si pas déjà dans frontmatter)
-        # Extract image from markdown (if not already in frontmatter)
-        if clean_md and "image" not in final_frontmatter:
-            img_match = re.search(r'!\[.*?\]\(([^)]+)\)', clean_md)
-            if img_match:
-                final_frontmatter["image"] = img_match.group(1)
+            clean_md = download_and_replace_images(clean_md, doc_dir, "markdown")
 
-        # 3.555 Extraction hero_image (2e image du markdown)
-        # Extract hero_image (2nd image from markdown)
-        if clean_md and "hero_image" not in final_frontmatter:
-            all_images = re.findall(r'!\[.*?\]\(([^)]+)\)', clean_md)
-            if len(all_images) >= 2:
-                final_frontmatter["hero_image"] = all_images[1]
+        # 3.55 Nettoyage <> Markdown autour des URLs dans toutes les clés texte
+        # Clean Markdown <> around URLs in all text frontmatter values
+        for key in ("logo", "image", "iframe", "résumé", "summary", "description"):
+            if key in final_frontmatter and isinstance(final_frontmatter[key], str):
+                final_frontmatter[key] = re.sub(r'<(https?://[^>]+)>', r'\1', final_frontmatter[key])
 
-        # 3.56 Normalisation des tags (liste) / Normalize tags (list)
+        # 3.56 Téléchargement des images frontmatter (logo, image)
+        # Download frontmatter images (logo, image)
+        for img_key in ("logo", "image"):
+            if img_key in final_frontmatter:
+                final_frontmatter[img_key] = download_frontmatter_image(final_frontmatter[img_key], doc_dir)
+
+        # 3.57 Normalisation des tags (liste) / Normalize tags (list)
         tags_raw = (final_frontmatter.get("tags")
                     or final_frontmatter.get("mots-clés")
                     or final_frontmatter.get("mots-cles")
@@ -559,20 +552,9 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             for old_key in ("mots-clés", "mots-cles", "keywords"):
                 final_frontmatter.pop(old_key, None)
 
-        # 3.57 Normalisation summary / Normalize summary
+        # 3.58 Normalisation summary / Normalize summary
         if "résumé" in final_frontmatter and "summary" not in final_frontmatter:
             final_frontmatter["summary"] = final_frontmatter["résumé"]
-
-        # 3.575 Nettoyage iframe (retire les <> Markdown autour des URLs)
-        # Clean iframe value (remove Markdown <> around URLs)
-        if "iframe" in final_frontmatter:
-            final_frontmatter["iframe"] = re.sub(r'<(https?://[^>]+)>', r'\1', final_frontmatter["iframe"])
-
-        # 3.576 Nettoyage <> Markdown dans résumé/summary/description
-        # Clean Markdown <> around URLs in summary fields
-        for key in ("résumé", "summary", "description"):
-            if key in final_frontmatter and isinstance(final_frontmatter[key], str):
-                final_frontmatter[key] = re.sub(r'<(https?://[^>]+)>', r'\1', final_frontmatter[key])
 
         # 3.58 Extraction excerpt (début du texte markdown)
         # Extract first text paragraph from markdown body for tile descriptions
@@ -604,29 +586,6 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
             # We stop processing here for this document and its children
             return
 
-        # Si un logo a été trouvé, on l'ajoute aux métadonnées temporairement pour le backend
-        # If a logo was found, add it to metadata temporarily for the backend
-        if logo_filename:
-            final_frontmatter["logo_file"] = logo_filename
-        
-        # Si une image est dans les métadonnées, on la localise aussi
-        # If an image is in metadata, localize it too
-        if "image" in final_frontmatter and final_frontmatter["image"].startswith("http"):
-            url = final_frontmatter["image"]
-            try:
-                img_filename = os.path.basename(urllib.parse.urlparse(url).path)
-                if img_filename:
-                    img_local_path = os.path.join(doc_dir, img_filename)
-                    os.makedirs(doc_dir, exist_ok=True)
-                    img_res = session.get(url)
-                    if img_res.status_code == 200:
-                        with open(img_local_path, "wb") as f:
-                            f.write(img_res.content)
-                        final_frontmatter["image"] = img_filename
-                        logger.info(f"Image de couverture localisée : {img_filename}")
-            except Exception as e:
-                logger.error(f"Erreur image metadata {url} : {e}")
-
         logger.info(f"Traitement du document : {title} ({doc_id}) -> {doc_dir}")
 
         # 4. Enregistre les fichiers si ils ont été téléchargés
@@ -656,10 +615,6 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
                 md_with_fm += f"{key}: {value}\n"
         md_with_fm += "---\n\n"
 
-        # Ajout du titre en tant que titre H1 au début du contenu
-        # Add the title as H1 heading at the beginning of the content
-        md_with_fm += f"# {title}\n\n"
-
         if clean_md:
             md_with_fm += clean_md
 
@@ -677,7 +632,7 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # On fait une copie pour le stockage final (sans les champs temporaires)
         # We make a copy for final storage (without temporary fields)
         metadata_to_save = final_frontmatter.copy()
-        for field in ["path", "logo_file", "edit_url"]:
+        for field in ["path", "edit_url"]:
             if field in metadata_to_save:
                 del metadata_to_save[field]
 

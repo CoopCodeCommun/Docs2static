@@ -244,7 +244,7 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             if '[project.theme]' in toml_content:
                 # Ajout du logo si présent dans les métadonnées
                 # Add logo if present in metadata
-                logo_file = metadata.get("logo_file")
+                logo_file = metadata.get("logo")
                 if logo_file:
                     # On supprime d'éventuelles lignes logo existantes (commentées ou non) pour éviter les doublons
                     # Remove any existing logo lines (commented or not) to avoid duplicates
