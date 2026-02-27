@@ -178,13 +178,13 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
                 else:
                     toml_content = toml_content.replace('[project]', f'[project]\nrepo_url = "{root_docs_url}"')
 
-            # site_url (dérivé du dépôt GitHub/GitLab)
-            # site_url (derived from GitHub/GitLab repo)
+            # site_url (env SITE_URL en priorité, sinon dérivé du dépôt)
+            # site_url (env SITE_URL takes priority, else derived from repo)
             repo_for_url = os.getenv("GITHUB_REPO") or os.getenv("GITLAB_REPO") or ""
-            site_url = get_pages_url(repo_for_url)
+            site_url = os.getenv("SITE_URL") or get_pages_url(repo_for_url)
             if site_url:
-                if re.search(r'#?\s*site_url\s*=', toml_content):
-                    toml_content = re.sub(r'#?\s*site_url\s*=\s*".*?"', f'site_url = "{site_url}"', toml_content)
+                if re.search(r'^#?\s*site_url\s*=', toml_content, re.MULTILINE):
+                    toml_content = re.sub(r'^#?\s*site_url\s*=\s*".*?"', f'site_url = "{site_url}"', toml_content, flags=re.MULTILINE)
                 else:
                     toml_content = toml_content.replace('[project]', f'[project]\nsite_url = "{site_url}"')
 

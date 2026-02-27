@@ -10,6 +10,10 @@ GITHUB_REPO=
 # GitLab repository for upload (alternative)
 # GITLAB_REPO=
 
+# URL du site déployé (optionnel, sinon dérivé de GITHUB_REPO/GITLAB_REPO)
+# Deployed site URL (optional, else derived from GITHUB_REPO/GITLAB_REPO)
+# SITE_URL=https://mon-domaine.fr/
+
 # Moteur de site statique par défaut (ex: zensical)
 # Default static site generator (e.g., zensical)
 BACKEND=

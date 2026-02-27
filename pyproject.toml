@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "docs2static"
-version = "0.5"
+version = "0.6"
 description = "Fetch collaborative documents from a Docs instance and generate static sites with Zensical"
 readme = "README.md"
 license = "Apache-2.0"
