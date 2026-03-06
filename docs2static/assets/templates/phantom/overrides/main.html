@@ -55,7 +55,14 @@
 <div class="home-body">
   {{ page.content }}
 </div>
-
+<div class="home-body">
+  {# 
+    - Remplace tous les backslashes \ par <br>
+    - Le filtre | safe indique à Jinja / Zensical de ne pas échapper le HTML déjà présent
+  #}
+  {{ page.content | replace("\\\\", "<br>") | safe }}
+</div>
+  
 {# === TILES (sections enfants) === #}
 {% set tile_count = namespace(n=0) %}
 <nav class="home-tiles-wrapper" aria-label="Sections du site">
