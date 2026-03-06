@@ -34,6 +34,11 @@ docs2static = "docs2static.main:main"
 Homepage = "https://github.com/CoopCodeCommun/Docs2static"
 Repository = "https://github.com/CoopCodeCommun/Docs2static"
 
+[project.markdown_extensions]
+admonition = {}
+pymdownx.details = {}
+pymdownx.superfences = {}
+
 [tool.hatch.build.targets.wheel]
 packages = ["docs2static"]
 
