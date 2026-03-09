@@ -60,7 +60,7 @@
     - Remplace tous les backslashes \ par <br>
     - Le filtre | safe indique à Jinja / Zensical de ne pas échapper le HTML déjà présent
   #}
-  {{ page.content | replace("\\\\", "<br>") | safe }}
+  {{ page.content | replace("\\", "<br>") | safe }}
 </div>
   
 {# === TILES (sections enfants) === #}
