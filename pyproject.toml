@@ -9,7 +9,6 @@ description = "Fetch collaborative documents from a Docs instance and generate s
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.14"
-template = "phantom"
 authors = [
     { name = "CoopCodeCommun", email = "contact@tibillet.re" },
     { name = "Jonas TURBEAUX", email = "jturbeaux@pm.me" },
