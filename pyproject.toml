@@ -26,6 +26,7 @@ dependencies = [
     "requests-cache>=1.2.1",
     "zensical>=0.0.17",
 ]
+template = "phantom"
 
 [project.scripts]
 docs2static = "docs2static.main:main"
