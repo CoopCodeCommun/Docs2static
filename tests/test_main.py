@@ -196,7 +196,9 @@ class TestDocs2Static(unittest.TestCase):
         child2_dir = os.path.join(parent_dir, "second-enfant-deuxieme-sous-partie")
         with open(os.path.join(child2_dir, "metadata.json"), "r") as f:
             meta = json.load(f)
-            self.assertEqual(meta.get("order"), 1, "Le second enfant devrait avoir l'ordre 1")
+            # Le doc en ligne a desormais un enfant "Agenda" en tete, decalant les ordres :
+            # Agenda=0, Premier enfant=1, Second enfant=2.
+            self.assertEqual(meta.get("order"), 2, "Le second enfant devrait avoir l'ordre 2 (apres Agenda et Premier enfant)")
         
         # Vérification de Zensical
         zensical_toml = os.path.join(self.test_dir, "zensical.toml")

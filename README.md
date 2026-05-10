@@ -279,15 +279,8 @@ export UV_PUBLISH_TOKEN=pypi-...
 
 # 2. Mettre à jour CHANGELOG.md
 
-# 3. Builder les artefacts
-uv build
-
-# 4. Publier sur PyPI
-uv publish
-
-# 5. Taguer le commit et pousser
-git tag vX.Y.Z
-git push origin vX.Y.Z
+# 3. Builder, publier, tagger et pousser
+make release
 ```
 
 ## Licence
