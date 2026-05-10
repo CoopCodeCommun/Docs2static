@@ -5,6 +5,7 @@ import shutil
 import logging
 import unicodedata
 import importlib.resources
+from urllib.parse import urlparse
 from typing import Dict, Any, List
 
 # On récupère le logger configuré dans le main
@@ -457,6 +458,33 @@ def ensure_ssh_url(url: str) -> str:
         
     return url
 
+def _write_cname_if_custom_domain(site_dir: str):
+    """
+    Écrit un fichier CNAME à la racine du site si SITE_URL pointe sur un domaine custom.
+    Sans ce fichier, GitHub/GitLab Pages perd le domaine custom à chaque force-push.
+
+    Writes a CNAME file at site root if SITE_URL points to a custom domain.
+    Without this file, GitHub/GitLab Pages loses the custom domain on each force-push.
+    """
+    site_url = os.getenv("SITE_URL", "").strip()
+    if not site_url:
+        return
+
+    hostname = urlparse(site_url).hostname
+    if not hostname:
+        return
+
+    # Skip les domaines par défaut Pages : pas de CNAME nécessaire
+    # Skip default Pages domains: no CNAME needed
+    if hostname.endswith(".github.io") or hostname.endswith(".gitlab.io") or hostname == "localhost":
+        return
+
+    cname_path = os.path.join(site_dir, "CNAME")
+    with open(cname_path, "w", encoding="utf-8") as f:
+        f.write(f"{hostname}\n")
+    logger.info(f"CNAME écrit pour domaine custom : {hostname}")
+
+
 def deploy_zensical(base_dir: str, repo_url: str):
     """
     Lance le build de Zensical et déploie sur GitHub/GitLab Pages via SSH.
@@ -494,6 +522,10 @@ def deploy_zensical(base_dir: str, repo_url: str):
         src = os.path.join(base_dir, seo_file)
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(site_dir, seo_file))
+
+    # CNAME pour domaine custom GitHub/GitLab Pages
+    # CNAME for custom GitHub/GitLab Pages domain
+    _write_cname_if_custom_domain(site_dir)
 
     # 2. Déploiement
     site_dir = os.path.join(base_dir, "site")
