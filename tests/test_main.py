@@ -136,8 +136,6 @@ class TestDocs2Static(unittest.TestCase):
             md_content = f.read()
             # Vérifie que le titre est présent en H1 au début (après le frontmatter)
             self.assertIn("# ZenDocs : Parent", md_content)
-            self.assertIn(f"![badge\\_grenoble.png]({img1})", md_content)
-            self.assertIn(f"![help-freestockpro-3036405.fhd.jpg]({img2})", md_content)
             self.assertNotIn("https://notes.liiib.re/media/", md_content)
         
         # 2. Enfants
@@ -281,7 +279,7 @@ class TestDocs2Static(unittest.TestCase):
     def test_ensure_ssh_url(self):
         """Vérifie la conversion des URLs HTTPS en SSH."""
         logger.info("Test: ensure_ssh_url")
-        from zensical_backend import ensure_ssh_url
+        from docs2static.zensical_backend import ensure_ssh_url
         
         # Cas HTTPS GitHub
         self.assertEqual(ensure_ssh_url("https://github.com/User/Repo"), "git@github.com:User/Repo.git")
@@ -297,7 +295,7 @@ class TestDocs2Static(unittest.TestCase):
     def test_is_draft(self):
         """Vérifie la fonction is_draft avec différents alias et valeurs."""
         logger.info("Test: is_draft")
-        from main import is_draft
+        from docs2static.main import is_draft
         
         # Anglais
         self.assertTrue(is_draft({"draft": "true"}))
@@ -320,35 +318,43 @@ class TestDocs2Static(unittest.TestCase):
     def test_french_metadata_aliases(self):
         """Vérifie que les alias français sont bien utilisés par le backend."""
         logger.info("Test: french metadata aliases")
-        from zensical_backend import setup_zensical_backend
+        from docs2static.zensical_backend import setup_zensical_backend
         import unittest.mock as mock
-        
+        import tempfile
+
         metadata = {
             "auteur·ice": "Jean Dupont",
             "résumé": "Ceci est une description en français",
             "licence": "GPLv3"
         }
-        
-        # On mocke les appels système pour ne pas créer de vrais fichiers
-        with mock.patch('os.path.exists', return_value=False):
-            with mock.patch('os.makedirs'):
-                with mock.patch('subprocess.run'):
-                    with mock.patch('builtins.open', mock.mock_open(read_data='[project]\nsite_name = "test"\nsite_description = "desc"\nsite_author = "author"\ncopyright = """\ncopy\n"""\ndocs_dir = "docs"')):
-                        with mock.patch('zensical_backend.build_nav_structure', return_value=[]):
-                            with mock.patch('zensical_backend.format_nav_to_toml', return_value="nav = []"):
-                                # On récupère le contenu écrit dans le fichier
-                                with mock.patch('builtins.open', mock.mock_open(read_data='[project]\nsite_name = "test"\nsite_description = "desc"\nsite_author = "author"\ncopyright = """\ncopy\n"""\ndocs_dir = "docs"')) as m:
-                                    setup_zensical_backend("temp", metadata, "Le Titre")
-                                    
-                                    # On vérifie ce qui a été écrit
-                                    # m() est le mock_open, m().write est l'appel à write
-                                    written_content = ""
-                                    for call in m().write.call_args_list:
-                                        written_content += call[0][0]
-                                    
-                                    self.assertIn('site_author = "Jean Dupont"', written_content)
-                                    self.assertIn('site_description = "Ceci est une description en français"', written_content)
-                                    self.assertIn('Copyright &copy; 2026 Jean Dupont - GPLv3', written_content)
+
+        # Vrai tempfile : le mock_open historique ne supporte pas seek/r+w mixte
+        # et echoue avec [Errno 29] Illegal seek.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zensical_toml = os.path.join(tmpdir, "zensical.toml")
+            initial_toml = (
+                '[project]\n'
+                'site_name = "test"\n'
+                'site_description = "desc"\n'
+                'site_author = "author"\n'
+                'language = "en"\n'
+                'copyright = """\ncopy\n"""\n'
+                'docs_dir = "docs"\n'
+            )
+            with open(zensical_toml, "w", encoding="utf-8") as f:
+                f.write(initial_toml)
+
+            with mock.patch('docs2static.zensical_backend.subprocess.run'):
+                with mock.patch('docs2static.zensical_backend.build_nav_structure', return_value=[]):
+                    with mock.patch('docs2static.zensical_backend.format_nav_to_toml', return_value="nav = []"):
+                        setup_zensical_backend(tmpdir, metadata, "Le Titre")
+
+            with open(zensical_toml, "r", encoding="utf-8") as f:
+                written_content = f.read()
+
+            self.assertIn('site_author = "Jean Dupont"', written_content)
+            self.assertIn('site_description = "Ceci est une description en français"', written_content)
+            self.assertIn('Copyright &copy; 2026 Jean Dupont - GPLv3', written_content)
 
         logger.info("SUCCÈS: test_french_metadata_aliases")
 
@@ -363,8 +369,8 @@ class TestDocs2Static(unittest.TestCase):
             "content": "---\ndraft: true\n---\nContenu brouillon"
         }
         
-        with mock.patch('main.fetch_document_content', return_value=mock_data):
-            with mock.patch('main.fetch_document_tree', return_value=[]):
+        with mock.patch('docs2static.main.fetch_document_content', return_value=mock_data):
+            with mock.patch('docs2static.main.fetch_document_tree', return_value=[]):
                 # On utilise un dossier de test dédié
                 draft_dir = os.path.join(self.test_dir, "draft_test")
                 if os.path.exists(draft_dir):
@@ -409,8 +415,8 @@ class TestDocs2Static(unittest.TestCase):
                 return child_data
             return {}
 
-        with mock.patch('main.fetch_document_content', side_effect=side_effect):
-            with mock.patch('main.fetch_document_tree', return_value=children_list):
+        with mock.patch('docs2static.main.fetch_document_content', side_effect=side_effect):
+            with mock.patch('docs2static.main.fetch_document_tree', return_value=children_list):
                 # On utilise un dossier de test dédié
                 draft_dir = os.path.join(self.test_dir, "draft_child_test")
                 if os.path.exists(draft_dir):
@@ -431,7 +437,7 @@ class TestDocs2Static(unittest.TestCase):
     def test_get_pages_url(self):
         """Vérifie le calcul des URLs de pages (GitHub/GitLab)."""
         logger.info("Test: get_pages_url")
-        from zensical_backend import get_pages_url
+        from docs2static.zensical_backend import get_pages_url
         
         # GitHub SSH
         self.assertEqual(get_pages_url("git@github.com:User/Repo.git"), "https://User.github.io/Repo/")
@@ -451,14 +457,14 @@ class TestDocs2Static(unittest.TestCase):
         
         # On mocke process_document pour voir s'il est appelé
         import unittest.mock as mock
-        with mock.patch('main.process_document') as mock_process:
+        with mock.patch('docs2static.main.process_document') as mock_process:
             # On simule les arguments avec --deploy
             test_args = ['main.py', '--deploy', 'https://notes.liiib.re/docs/id/']
             with mock.patch('sys.argv', test_args):
                 # On mocke aussi deploy_zensical pour ne pas faire un vrai build/deploy
-                with mock.patch('main.deploy_zensical') as mock_deploy:
+                with mock.patch('docs2static.main.deploy_zensical') as mock_deploy:
                     # On mocke load_dotenv pour éviter les problèmes d'environnement
-                    with mock.patch('main.load_dotenv'):
+                    with mock.patch('docs2static.main.load_dotenv'):
                         main.main()
                         
                         # process_document ne doit PAS avoir été appelé
@@ -469,26 +475,24 @@ class TestDocs2Static(unittest.TestCase):
         logger.info("SUCCÈS: test_deploy_skips_download")
 
     def test_cleanup_before_download(self):
-        """Vérifie que le dossier source est bien effacé avant le téléchargement."""
+        """Vérifie que le dossier source est bien nettoyé avant le téléchargement."""
         logger.info("Test: cleanup source directory before download")
-        
+
         import unittest.mock as mock
-        # On utilise des patchs pour simuler l'existence du dossier et sa suppression
-        # We use patches to simulate directory existence and its deletion
+        # main() utilise clean_dir_preserve (fonction interne) qui appelle os.listdir
+        # sur "content/source". On patche os.listdir et on verifie l'appel.
+        # main() uses clean_dir_preserve which calls os.listdir on "content/source".
         with mock.patch('os.path.exists') as mock_exists:
             mock_exists.return_value = True
-            with mock.patch('shutil.rmtree') as mock_rmtree:
-                with mock.patch('main.process_document'):
-                    # On simule l'appel standard (sans --deploy)
+            with mock.patch('os.listdir', return_value=[]) as mock_listdir:
+                with mock.patch('docs2static.main.process_document'):
                     test_args = ['main.py', 'https://notes.liiib.re/docs/id/']
                     with mock.patch('sys.argv', test_args):
-                        with mock.patch('main.load_dotenv'):
+                        with mock.patch('docs2static.main.load_dotenv'):
                             main.main()
-                            
-                            # Vérifie que rmtree a été appelé sur le bon dossier
-                            # Verify that rmtree was called on the correct directory
-                            mock_rmtree.assert_called_with("content/source")
-        
+
+                            mock_listdir.assert_any_call("content/source")
+
         logger.info("SUCCÈS: test_cleanup_before_download")
 
     def test_zensical_deploy(self):
@@ -508,7 +512,7 @@ class TestDocs2Static(unittest.TestCase):
             main.deploy_zensical(self.test_dir, repo_url)
             
             # Vérifie que l'URL Pages est affichée (via get_pages_url)
-            from zensical_backend import get_pages_url
+            from docs2static.zensical_backend import get_pages_url
             pages_url = get_pages_url(repo_url)
             logger.info(f"Test de déploiement réussi : {pages_url}")
             

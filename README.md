@@ -257,6 +257,39 @@ uv run python tests/test_main.py --deploy        # Test deploiement reel
 uv run python tests/test_main.py --test-zensical # Test rendu interactif
 ```
 
+## Release (mainteneurs)
+
+### Prérequis
+
+Un token PyPI est nécessaire pour publier. Le générer sur [pypi.org](https://pypi.org) → Account settings → API tokens.
+
+**Stocker le token dans un gestionnaire de secrets** (KeePass, Vault, Bitwarden, etc.) — ne jamais le committer.
+
+Pour éviter de le ressaisir à chaque fois, l'exporter comme variable d'environnement :
+
+```bash
+export UV_PUBLISH_TOKEN=pypi-...
+```
+
+### Étapes
+
+```bash
+# 1. Mettre à jour la version dans pyproject.toml
+#    version = "X.Y.Z"
+
+# 2. Mettre à jour CHANGELOG.md
+
+# 3. Builder les artefacts
+uv build
+
+# 4. Publier sur PyPI
+uv publish
+
+# 5. Taguer le commit et pousser
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
 ## Licence
 
 Apache 2.0 - Voir [LICENSE](LICENSE).
