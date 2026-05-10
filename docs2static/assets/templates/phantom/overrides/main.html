@@ -1,28 +1,35 @@
 {% extends "base.html" %}
 
 {% block htmltitle %}
-{% if page.url == "" %}
+{# Override : Zensical natif duplique site_name quand page.meta.title == site_name (cas homepage) #}
+{# Override: native Zensical duplicates site_name when page.meta.title == site_name (homepage case) #}
+{% if page.is_homepage or page.url == "" %}
 <title>{{ config.site_name }}</title>
+{% elif page.meta and page.meta.title %}
+<title>{{ page.meta.title }} - {{ config.site_name }}</title>
+{% elif page.title %}
+<title>{{ page.title | striptags }} - {{ config.site_name }}</title>
 {% else %}
-<title>{{ page.title }} - {{ config.site_name }}</title>
+<title>{{ config.site_name }}</title>
 {% endif %}
 {% endblock %}
 
 {% block extrahead %}
 {% if page.meta %}
-{% set page_title = page.meta.title or config.site_name %}
-{% set page_desc = page.meta.summary or page.meta.excerpt or config.site_description %}
+{% set page_title = page.meta.title or page.title or config.site_name %}
+{% set page_desc = page.meta.description or page.meta.summary or page.meta.excerpt or config.site_description %}
 {% set page_image = page.meta.image or "" %}
 {% else %}
-{% set page_title = config.site_name %}
+{% set page_title = page.title or config.site_name %}
 {% set page_desc = config.site_description %}
 {% set page_image = "" %}
 {% endif %}
 {% set page_url = page.canonical_url or "" %}
 {% set base_url = config.site_url or "" %}
+{% set is_home = (page.url == "" or page.is_homepage) %}
 
 <!-- Open Graph -->
-<meta property="og:type" content="website">
+<meta property="og:type" content="{% if is_home %}website{% else %}article{% endif %}">
 <meta property="og:title" content="{{ page_title }}">
 <meta property="og:description" content="{{ page_desc }}">
 {% if page_url %}<meta property="og:url" content="{{ page_url }}">{% endif %}
@@ -39,9 +46,9 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "{{ config.site_name | e }}",
-  "url": "{{ base_url or page_url }}",
+  "@type": "{% if is_home %}WebSite{% else %}WebPage{% endif %}",
+  "name": "{{ page_title | e }}",
+  "url": "{{ page_url or base_url }}",
   "description": "{{ page_desc | e }}"{% if config.site_author %},
   "author": { "@type": "Organization", "name": "{{ config.site_author | e }}" }{% endif %}
 }

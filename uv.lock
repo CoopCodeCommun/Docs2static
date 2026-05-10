@@ -118,11 +118,12 @@ wheels = [
 
 [[package]]
 name = "docs2static"
-version = "0.6.2"
+version = "0.6.3"
 source = { editable = "." }
 dependencies = [
     { name = "colorlog" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "requests" },
     { name = "requests-cache" },
     { name = "zensical" },
@@ -132,6 +133,7 @@ dependencies = [
 requires-dist = [
     { name = "colorlog", specifier = ">=6.10.1" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "requests-cache", specifier = ">=1.2.1" },
     { name = "zensical", specifier = ">=0.0.17" },

@@ -6,6 +6,7 @@ import requests_cache
 import http.cookiejar
 import json
 import re
+import yaml
 import argparse
 import urllib.parse
 import unicodedata
@@ -597,23 +598,45 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         # Add the edit URL to metadata for Zensical
         final_frontmatter["edit_url"] = f"{base_url}/docs/{doc_id}/"
 
+        # Injection des clés SEO dans le frontmatter avant écriture YAML
+        # SEO keys injection in frontmatter before YAML write
+        # Zensical lit page.meta.title pour <title> et page.meta.description pour <meta name="description">
+        # Zensical reads page.meta.title for <title> and page.meta.description for <meta name="description">
+        final_frontmatter["title"] = title
+        if "description" not in final_frontmatter:
+            desc_source = (
+                final_frontmatter.get("summary")
+                or final_frontmatter.get("résumé")
+                or final_frontmatter.get("excerpt")
+            )
+            if desc_source:
+                desc = str(desc_source).strip()
+                if len(desc) > 160:
+                    desc = desc[:160].rsplit(" ", 1)[0] + "…"
+                final_frontmatter["description"] = desc
+
+        # Garantit un H1 dans le markdown pour éviter le fallback "Index" de Zensical
+        # Guarantees an H1 in markdown to avoid Zensical "Index" fallback
+        if clean_md and not re.match(r'^\s*#\s', clean_md.lstrip()):
+            clean_md = f"# {title}\n\n{clean_md}"
+
         # Reconstruit le bloc frontmatter en Markdown pour index.md
         # On crée toujours un index.md, même si le contenu est vide,
         # pour que Zensical puisse construire la navigation des sections.
         # Rebuild the Markdown frontmatter block for index.md
         # Always create an index.md, even if content is empty,
         # so Zensical can build section navigation.
-        md_with_fm = "---\n"
-        for key, value in final_frontmatter.items():
-            # Supporte les listes (tags) et les scalaires
-            # Supports lists (tags) and scalars
-            if isinstance(value, list):
-                md_with_fm += f"{key}:\n"
-                for item in value:
-                    md_with_fm += f"  - {item}\n"
-            elif isinstance(value, (str, int, float)):
-                md_with_fm += f"{key}: {value}\n"
-        md_with_fm += "---\n\n"
+        # On utilise yaml.safe_dump pour quoter automatiquement les valeurs problématiques
+        # (ex: "ZenDocs : Parent" contient ":" qui casse YAML sans quotes)
+        # Use yaml.safe_dump to auto-quote problematic values
+        # (e.g. "ZenDocs : Parent" contains ":" which breaks YAML without quotes)
+        yaml_dump = yaml.safe_dump(
+            final_frontmatter,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+        )
+        md_with_fm = f"---\n{yaml_dump}---\n\n"
 
         if clean_md:
             md_with_fm += clean_md
