@@ -1,57 +1,42 @@
 # Docs2Static
 
-Transforme des documents collaboratifs [Docs](https://docs.suite.anct.gouv.fr/) en site statique avec [Zensical](https://zensical.org/). Homepage stylisee incluse.
+Transforme des documents collaboratifs [Docs](https://docs.suite.anct.gouv.fr/) en site statique avec [Zensical](https://zensical.org/). Homepage stylisée incluse.
 
-**Exemple :** [Document source](https://notes.liiib.re/docs/fa5583b2-37fc-4016-998f-f5237fd41642/) -> [Site genere](https://CoopCodeCommun.github.io/Docs2static/)
+**Exemple :** [Document source](https://notes.liiib.re/docs/fa5583b2-37fc-4016-998f-f5237fd41642/) → [Site généré](https://CoopCodeCommun.github.io/Docs2static/)
 
-## Installation
+## Démarrage rapide
+
+Requiert **Python 3.14+** et [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
-# Avec pip
-pip install docs2static
-
-# Avec uv
-uv add docs2static
-
-# Depuis les sources
+# 1. Cloner le projet
 git clone git@github.com:CoopCodeCommun/Docs2static.git
 cd Docs2static
+
+# 2. Installer les dépendances
 uv sync
-```
 
-### Mise à jour
-
-```bash
-# Avec uv
-uv add docs2static --upgrade
-
-# Avec pip
-pip install --upgrade docs2static
-```
-
-### Vérifier la version installée
-
-```bash
-uv pip show docs2static
-```
-
-Requiert Python 3.14+.
-
-## Configuration
-
-```bash
+# 3. Configurer
 cp env_example .env
+# Éditez .env : au minimum DOCS_URL (URL de votre document Docs racine)
+
+# 4. Build du site (fetch + génération markdown + assets)
+make build
+
+# 5. Servir localement (live reload)
+make serve   # → http://localhost:8000
 ```
 
-Variables dans le `.env` :
+## Configuration `.env`
 
-| Variable | Description |
-|----------|-------------|
-| `DOCS_URL` | URL du document Docs racine |
-| `GITHUB_REPO` | Adresse SSH du depot GitHub (ex: `git@github.com:User/Repo.git`) |
-| `GITLAB_REPO` | Adresse SSH du depot GitLab (alternative) |
-| `BACKEND` | Moteur statique (par defaut : `zensical`) |
-| `TEMPLATE` | Template homepage (par defaut : `phantom`) |
+| Variable | Obligatoire | Description |
+|----------|-------------|-------------|
+| `DOCS_URL` | ✅ | URL du document Docs racine (ex: `https://notes.liiib.re/docs/UUID/`) |
+| `GITHUB_REPO` | recommandé | Dépôt GitHub Pages cible (ex: `https://github.com/Org/Repo`) |
+| `GITLAB_REPO` | alternative | Dépôt GitLab Pages cible |
+| `SITE_URL` | optionnel | URL publique du site. Si custom domain, un `CNAME` est généré au déploiement |
+| `BACKEND` | optionnel | Moteur statique (défaut : `zensical`) |
+| `TEMPLATE` | optionnel | Template homepage (défaut : `phantom`) |
 
 ### Exemple concret
 
@@ -63,49 +48,36 @@ GITHUB_REPO=https://github.com/CoopCodeCommun/Docs2static
 BACKEND=zensical
 ```
 
-## Usage CLI
+## Commandes Make
+
+| Commande | Description |
+|----------|-------------|
+| `make build` | Fetch les Docs + génère les markdown + copie les assets template |
+| `make build-no-cache` | Idem, ignore le cache SQLite 24h |
+| `make serve` | Lance le serveur local Zensical (live reload) sur http://localhost:8000 |
+| `make audit` | Audit éditorial pré-build via le skill Claude Code (frontmatter, images, SEO, données structurées) |
+| `make help` | Affiche toutes les commandes |
+
+Pour déployer sur GitHub/GitLab Pages (mainteneurs uniquement, nécessite une clé SSH avec write access) :
 
 ```bash
-# Telecharger les documents et construire le site
-docs2static
-
-# Deployer sur GitHub/GitLab Pages (sans retelecharger)
-docs2static --deploy
-
-# Forcer le telechargement sans cache
-docs2static --no-cache
-
-# Specifier le format de sortie
-docs2static -f html        # html, markdown ou both
+uv run docs2static --deploy
 ```
 
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `-f, --format` | Format de sortie (`html`, `markdown`, `both`) |
-| `--no-cache` | Ignorer le cache SQLite (24h par defaut) |
-| `-b, --backend` | Moteur de site statique |
-| `-d, --deploy` | Deployer sans retelecharger |
+Cette commande build et force-push le site dans la branche `gh-pages` (ou `gl-pages` pour GitLab) du dépôt configuré dans `GITHUB_REPO` / `GITLAB_REPO`. La page Mentions légales, le CNAME (si domaine custom), `robots.txt`, `humans.txt` et `sitemap.xml` sont régénérés à chaque deploy.
 
 ### Audit pré-build (skill Claude Code)
 
-Avant de lancer un build, vous pouvez auditer la qualité éditoriale de vos Docs source via le skill **`docs-content-curator`** (embarqué dans `.claude/skills/` du projet) :
-
-```bash
-make audit
-```
-
-Le skill lit vos Docs via le MCP [`lasuite-docs`](https://github.com/CoopCodeCommun/lasuite-docs-mcp) et vérifie :
+`make audit` invoque le skill **`docs-content-curator`** (embarqué dans `.claude/skills/`) qui lit vos Docs source via le MCP [`lasuite-docs`](https://github.com/CoopCodeCommun/lasuite-docs-mcp) et vérifie :
 
 - **Frontmatter** : clés obligatoires (`titre`), recommandées (`résumé`, `auteur·ice`, `image`), orthographes
 - **Images** : `alt` text, format (WebP/AVIF), dimensions raisonnables
 - **SEO** : longueur title/description, unicité H1, canonical, Open Graph
-- **Données structurées** : Schema.org JSON-LD (`Organization`, `Event`, `Article`...), `BreadcrumbList`
-- **Mentions légales** : présence d'une page dédiée + `legal_url:` configuré
+- **Données structurées** : Schema.org JSON-LD (`Organization`, `Event`, `Article`…), `BreadcrumbList`
+- **Mentions légales** : page auto-générée par défaut, ou page custom via `legal_url:`
 - **FAQ** : suggestion de page `FAQPage` Schema.org
 
-Sortie : un rapport structuré (✅ / ⚠️ / ❌ / 💡) avec un score /100 et des patches optionnels appliqués via le MCP (avec confirmation explicite avant écriture). Pré-requis : la CLI [Claude Code](https://docs.claude.com/claude-code/quickstart) installée et le MCP `lasuite-docs` configuré.
+Sortie : rapport structuré (✅ / ⚠️ / ❌ / 💡) avec score /100 et patches optionnels appliqués via MCP (confirmation explicite requise avant écriture). Pré-requis : CLI [Claude Code](https://docs.claude.com/claude-code/quickstart) installée et MCP `lasuite-docs` configuré.
 
 ## Metadonnees (frontmatter)
 
@@ -179,91 +151,6 @@ iframe: src="https://example.com/embed/" width="100%" height="1000px"
 ```
 
 L'iframe sera affichee sous le contenu de la page.
-
-## Deploiement en production
-
-### GitHub Actions
-
-Creez `.github/workflows/docs2static.yml` :
-
-```yaml
-name: Build & Deploy Documentation
-
-on:
-  schedule:
-    - cron: '0 6 * * *'   # Tous les jours a 6h
-  workflow_dispatch:        # Lancement manuel
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Setup Python
-        run: uv python install 3.14
-
-      - name: Install docs2static
-        run: uv add docs2static
-
-      - name: Build & Deploy
-        env:
-          DOCS_URL: ${{ secrets.DOCS_URL }}
-          GITHUB_REPO: ${{ secrets.GITHUB_REPO }}
-          BACKEND: zensical
-        run: |
-          uv run docs2static
-          uv run docs2static --deploy
-```
-
-Ajoutez les secrets `DOCS_URL` et `GITHUB_REPO` dans les parametres du depot.
-Configurez une cle SSH de deploiement avec acces en ecriture au depot cible.
-
-### GitLab CI
-
-Creez `.gitlab-ci.yml` :
-
-```yaml
-pages:
-  image: python:3.14
-  stage: deploy
-  script:
-    - pip install uv
-    - uv add docs2static
-    - uv run docs2static
-    - uv run docs2static --deploy
-  variables:
-    DOCS_URL: $DOCS_URL
-    GITLAB_REPO: $GITLAB_REPO
-    BACKEND: zensical
-  only:
-    - schedules
-    - web
-```
-
-Ajoutez les variables `DOCS_URL` et `GITLAB_REPO` dans CI/CD > Variables.
-
-### Deploiement manuel (serveur)
-
-```bash
-# Installation
-pip install docs2static
-
-# Configuration
-export DOCS_URL="https://notes.liiib.re/docs/votre-doc-id/"
-export GITHUB_REPO="git@github.com:Org/Repo.git"
-export BACKEND="zensical"
-
-# Execution
-docs2static              # Telecharge + build
-docs2static --deploy     # Deploie sur Pages
-
-# Cron (optionnel)
-echo "0 6 * * * cd /opt/docs && docs2static && docs2static --deploy" | crontab -
-```
 
 ## Architecture
 

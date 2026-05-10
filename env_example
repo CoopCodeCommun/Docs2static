@@ -23,7 +23,7 @@ GITHUB_REPO=
 
 # Moteur de site statique par défaut (ex: zensical)
 # Default static site generator (e.g., zensical)
-BACKEND=
+BACKEND=zensical
 
 
 ### POUR LES TESTS
