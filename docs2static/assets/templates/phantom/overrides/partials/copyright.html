@@ -1,0 +1,27 @@
+{#-
+  Phantom override : ajoute un lien Mentions légales dans le footer si
+  config.extra.legal_url est défini (depuis frontmatter racine `legal_url:`).
+  Phantom override: adds a Legal notice link in the footer when
+  config.extra.legal_url is set (from root frontmatter `legal_url:`).
+-#}
+<div class="md-copyright">
+  {% if config.copyright %}
+    <div class="md-copyright__highlight">
+      {{ config.copyright }}
+    </div>
+  {% endif %}
+
+  {% if config.extra and config.extra.legal_url %}
+    <span class="md-copyright__legal">
+      <a href="{{ config.extra.legal_url | url }}">Mentions légales</a>
+    </span>
+  {% endif %}
+
+
+  {% if not config.extra.generator == false %}
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  {% endif %}
+</div>
