@@ -538,11 +538,12 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         if clean_md:
             clean_md = download_and_replace_images(clean_md, doc_dir, "markdown")
 
-        # 3.55 Nettoyage <> Markdown autour des URLs dans toutes les clés texte
-        # Clean Markdown <> around URLs in all text frontmatter values
+        # 3.55 Nettoyage <> Markdown autour des URLs + soft-break BlockNote `\` trailing
+        # Clean Markdown <> around URLs + trailing `\` from BlockNote soft-breaks
         for key in ("logo", "image", "iframe", "résumé", "summary", "description"):
             if key in final_frontmatter and isinstance(final_frontmatter[key], str):
-                final_frontmatter[key] = re.sub(r'<(https?://[^>]+)>', r'\1', final_frontmatter[key])
+                cleaned = re.sub(r'<(https?://[^>]+)>', r'\1', final_frontmatter[key])
+                final_frontmatter[key] = cleaned.strip().rstrip('\\').strip()
 
         # 3.56 Téléchargement des images frontmatter (logo, image)
         # Download frontmatter images (logo, image)
