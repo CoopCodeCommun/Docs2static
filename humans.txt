@@ -1,0 +1,6 @@
+/* TEAM */
+Creator: Coopérative Code Commun
+
+/* SITE */
+Generator: Docs2Static (https://github.com/CoopCodeCommun/Docs2static)
+Language: fr

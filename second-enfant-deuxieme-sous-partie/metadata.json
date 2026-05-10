@@ -1,0 +1,13 @@
+{
+  "auteur·ice": "Jonas",
+  "category": "sous partie 2",
+  "summary": "Sous partie 2",
+  "status": "published",
+  "tags": [
+    "Zensical"
+  ],
+  "excerpt": "Ceci est le document enfant 2 du test zendocs",
+  "title": "Second enfant : deuxieme sous partie",
+  "description": "Sous partie 2",
+  "order": 2
+}

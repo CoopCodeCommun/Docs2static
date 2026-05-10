@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://coopcodecommun.github.io/Docs2static/sitemap.xml
