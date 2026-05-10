@@ -19,6 +19,22 @@ cd Docs2static
 uv sync
 ```
 
+### Mise à jour
+
+```bash
+# Avec uv
+uv add docs2static --upgrade
+
+# Avec pip
+pip install --upgrade docs2static
+```
+
+### Vérifier la version installée
+
+```bash
+uv pip show docs2static
+```
+
 Requiert Python 3.14+.
 
 ## Configuration
