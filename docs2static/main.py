@@ -815,6 +815,14 @@ def main():
     else:
         logger.info("Option --deploy détectée : Utilisation des fichiers locaux existants (pas de téléchargement).")
             
+    # Copie des fichiers SEO dans site/ pour le serveur de dev (robots.txt, humans.txt)
+    site_dir = "content/site"
+    if os.path.exists(site_dir):
+        for seo_file in ("robots.txt", "humans.txt"):
+            src = os.path.join("content", seo_file)
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(site_dir, seo_file))
+
     # Si l'option deploy est activée / If deploy option is enabled
     if args.deploy:
         if args.backend == "zensical":

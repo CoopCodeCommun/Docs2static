@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 
+{% block htmltitle %}
+{% if page.url == "" %}
+<title>{{ config.site_name }}</title>
+{% else %}
+<title>{{ page.title }} - {{ config.site_name }}</title>
+{% endif %}
+{% endblock %}
+
 {% block extrahead %}
 {% if page.meta %}
 {% set page_title = page.meta.title or config.site_name %}
@@ -26,6 +34,18 @@
 <meta name="twitter:title" content="{{ page_title }}">
 <meta name="twitter:description" content="{{ page_desc }}">
 {% if page_image and base_url %}<meta name="twitter:image" content="{{ base_url }}{{ page_image }}">{% endif %}
+
+<!-- Schema.org JSON-LD -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "{{ config.site_name | e }}",
+  "url": "{{ base_url or page_url }}",
+  "description": "{{ page_desc | e }}"{% if config.site_author %},
+  "author": { "@type": "Organization", "name": "{{ config.site_author | e }}" }{% endif %}
+}
+</script>
 {% endblock %}
 
 {% block content %}
@@ -41,7 +61,7 @@
     <img class="home-hero__logo" src="{{ page.meta.logo }}" alt="">
   {% endif %}
 
-  <h1 class="home-title">{{ config.site_name }}</h1>
+  <p class="home-title">{{ config.site_name }}</p>
 
   {% if page.meta and page.meta.summary %}
     <p class="home-subtitle">{{ page.meta.summary }}</p>
@@ -53,13 +73,6 @@
 
 {# === CONTENU MARKDOWN === #}
 <div class="home-body">
-  {{ page.content }}
-</div>
-<div class="home-body">
-  {# 
-    - Remplace tous les backslashes \ par <br>
-    - Le filtre | safe indique à Jinja / Zensical de ne pas échapper le HTML déjà présent
-  #}
   {{ page.content | replace("\\", "<br>") | safe }}
 </div>
   

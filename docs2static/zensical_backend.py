@@ -345,8 +345,55 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             with open(zensical_toml, "w", encoding="utf-8") as f:
                 f.write(toml_content)
             logger.info(f"Zensical configuré avec succès : {zensical_toml}")
+            _generate_seo_files(base_dir, metadata, site_url)
     except Exception as e:
         logger.error(f"Erreur lors de la mise à jour de zensical.toml : {e}")
+
+def _generate_seo_files(base_dir: str, metadata: Dict[str, Any], site_url: str):
+    """Génère robots.txt et humans.txt à la racine du projet Zensical."""
+    robots_path = os.path.join(base_dir, "robots.txt")
+    sitemap_url = site_url.rstrip("/") + "/sitemap.xml" if site_url else ""
+    robots_content = "User-agent: *\nAllow: /\n"
+    if sitemap_url:
+        robots_content += f"Sitemap: {sitemap_url}\n"
+    with open(robots_path, "w", encoding="utf-8") as f:
+        f.write(robots_content)
+
+    humans_path = os.path.join(base_dir, "humans.txt")
+    author = metadata.get("auteur·ice") or metadata.get("author") or "The authors"
+    humans_content = (
+        "/* TEAM */\n"
+        f"Creator: {author}\n\n"
+        "/* SITE */\n"
+        "Generator: Docs2Static (https://github.com/CoopCodeCommun/Docs2static)\n"
+        "Language: fr\n"
+    )
+    with open(humans_path, "w", encoding="utf-8") as f:
+        f.write(humans_content)
+
+    for filename in ("robots.txt", "humans.txt"):
+        _add_extra_file(os.path.join(base_dir, "zensical.toml"), filename)
+
+
+def _add_extra_file(toml_path: str, filename: str):
+    """Ajoute filename dans extra_files du zensical.toml si pas déjà présent."""
+    if not os.path.exists(toml_path):
+        return
+    with open(toml_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    if filename in content:
+        return
+    if re.search(r'extra_files\s*=\s*\[', content):
+        content = re.sub(
+            r'(extra_files\s*=\s*\[)',
+            f'\\1"{filename}", ',
+            content
+        )
+    else:
+        content = content.replace('[project]', f'[project]\nextra_files = ["{filename}"]')
+    with open(toml_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
 
 def get_pages_url(repo_url: str) -> str:
     """
@@ -440,6 +487,13 @@ def deploy_zensical(base_dir: str, repo_url: str):
     except Exception as e:
         logger.error(f"Erreur lors du build Zensical : {e}")
         return
+
+    # Copie des fichiers SEO à la racine du site (extra_files non supporté par Zensical)
+    site_dir = os.path.join(base_dir, "site")
+    for seo_file in ("robots.txt", "humans.txt"):
+        src = os.path.join(base_dir, seo_file)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(site_dir, seo_file))
 
     # 2. Déploiement
     site_dir = os.path.join(base_dir, "site")
