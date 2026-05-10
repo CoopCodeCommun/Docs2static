@@ -194,6 +194,18 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             language = metadata.get("langue") or metadata.get("language") or "fr"
             toml_content = re.sub(r'language\s*=\s*".*?"', f'language = "{language}"', toml_content)
 
+            # legal_url : exposé dans [extra] pour le footer
+            # legal_url: exposed in [extra] for the footer
+            legal_url = metadata.get("legal_url")
+            if legal_url:
+                if re.search(r'^\[extra\]', toml_content, re.MULTILINE):
+                    if re.search(r'^\s*legal_url\s*=', toml_content, re.MULTILINE):
+                        toml_content = re.sub(r'^\s*legal_url\s*=\s*".*?"', f'legal_url = "{legal_url}"', toml_content, flags=re.MULTILINE)
+                    else:
+                        toml_content = re.sub(r'(^\[extra\][^\[]*)', rf'\1legal_url = "{legal_url}"\n', toml_content, count=1, flags=re.MULTILINE)
+                else:
+                    toml_content += f'\n[extra]\nlegal_url = "{legal_url}"\n'
+
             # copyright
             license_val = metadata.get("licence") or metadata.get("license")
             author_val = metadata.get("auteur·ice") or metadata.get("author") or "The authors"
@@ -311,15 +323,14 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             # Copy embedded assets from templates/{template_name}/
             assets_dir = importlib.resources.files("docs2static") / "assets" / "templates" / template_name
 
-            # Copie overrides/ → content/overrides/
+            # Copie récursive de overrides/ → content/overrides/
+            # Préserve la structure des sous-dossiers (ex: partials/copyright.html)
+            # Recursive copy of overrides/ → content/overrides/
+            # Preserves subfolder structure (e.g. partials/copyright.html)
             overrides_dst = os.path.join(base_dir, "overrides")
-            os.makedirs(overrides_dst, exist_ok=True)
-            for f_name in ("main.html",):
-                src = assets_dir / "overrides" / f_name
-                dst = os.path.join(overrides_dst, f_name)
-                with importlib.resources.as_file(src) as src_path:
-                    shutil.copy2(src_path, dst)
-                logger.info(f"Asset copié : {dst}")
+            with importlib.resources.as_file(assets_dir / "overrides") as overrides_src:
+                shutil.copytree(overrides_src, overrides_dst, dirs_exist_ok=True)
+            logger.info(f"Assets overrides/ copiés vers : {overrides_dst}")
 
             # Copie stylesheets/ → content/source/{slug}/stylesheets/
             stylesheets_dst = os.path.join(base_docs_dir, "stylesheets")

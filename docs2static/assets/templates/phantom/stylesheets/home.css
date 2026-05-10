@@ -418,10 +418,14 @@
   }
 }
 
-/* Touch / mobile : contenu visible */
+/* Touch / mobile : pas de hover possible, on affiche tout l'excerpt en permanence */
 @media (hover: none) {
   .home-tile > a {
     background: rgba(0, 0, 0, 0.08);
+  }
+  .home-tile__content {
+    max-height: 15em;
+    opacity: 1;
   }
 }
 
@@ -440,6 +444,36 @@
   max-width: 100%;
 }
 
+.iframe-embed__title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  color: var(--md-default-fg-color);
+}
+
+/* ── Footer legal link ── */
+.md-copyright__legal {
+  display: inline-block;
+  margin: 0 0.6em;
+}
+
+.md-copyright__legal::before {
+  content: "·";
+  margin-right: 0.6em;
+  opacity: 0.5;
+}
+
+.md-copyright__legal a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+.md-copyright__legal a:hover {
+  text-decoration-thickness: 2px;
+}
+
 /* ── Animation ── */
 @keyframes home-fadeIn {
   from {
@@ -449,6 +483,23 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Respect user motion preference (vestibular disorders, etc.) — WCAG 2.3.3 */
+@media (prefers-reduced-motion: reduce) {
+  .home-hero,
+  .home-body,
+  .home-tiles {
+    animation: none;
+  }
+  .home-tile,
+  .home-tile__image,
+  .home-tile__image::before,
+  .home-tile__image--placeholder::before,
+  .home-tile__content,
+  .home-body a {
+    transition: none;
   }
 }
 

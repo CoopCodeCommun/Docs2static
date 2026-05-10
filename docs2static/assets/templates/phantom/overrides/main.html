@@ -28,8 +28,28 @@
 {% set base_url = config.site_url or "" %}
 {% set is_home = (page.url == "" or page.is_homepage) %}
 
+{# === Détection du type Schema.org ===
+   Priorité : schema_type explicite > event_date > author+date > WebPage/Org default
+   Priority: explicit schema_type > event_date > author+date > WebPage/Org default
+#}
+{% if is_home %}
+  {% set schema_type = (page.meta.schema_type if page.meta and page.meta.schema_type else "WebSite") %}
+  {% set og_type = "website" %}
+{% else %}
+  {% if page.meta and page.meta.schema_type %}
+    {% set schema_type = page.meta.schema_type %}
+  {% elif page.meta and page.meta.event_date %}
+    {% set schema_type = "Event" %}
+  {% elif page.meta and (page.meta.author or page.meta["auteur·ice"]) and page.meta.date %}
+    {% set schema_type = "Article" %}
+  {% else %}
+    {% set schema_type = "WebPage" %}
+  {% endif %}
+  {% set og_type = "article" if schema_type in ["Article", "BlogPosting", "NewsArticle"] else "website" %}
+{% endif %}
+
 <!-- Open Graph -->
-<meta property="og:type" content="{% if is_home %}website{% else %}article{% endif %}">
+<meta property="og:type" content="{{ og_type }}">
 <meta property="og:title" content="{{ page_title }}">
 <meta property="og:description" content="{{ page_desc }}">
 {% if page_url %}<meta property="og:url" content="{{ page_url }}">{% endif %}
@@ -42,17 +62,105 @@
 <meta name="twitter:description" content="{{ page_desc }}">
 {% if page_image and base_url %}<meta name="twitter:image" content="{{ base_url }}{{ page_image }}">{% endif %}
 
-<!-- Schema.org JSON-LD -->
+{# === Schema.org JSON-LD ===
+   Home : Organization (ou type spécialisé EducationalOrganization, NGO…) + WebSite implicite
+   Sous-page : WebPage / Article / Event + BreadcrumbList automatique
+#}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "{% if is_home %}WebSite{% else %}WebPage{% endif %}",
+  "@type": "{{ schema_type }}",
   "name": "{{ page_title | e }}",
   "url": "{{ page_url or base_url }}",
-  "description": "{{ page_desc | e }}"{% if config.site_author %},
-  "author": { "@type": "Organization", "name": "{{ config.site_author | e }}" }{% endif %}
+  "description": "{{ page_desc | e }}"
+  {%- if is_home %}
+    {%- if page.meta and page.meta.logo and base_url %},
+  "logo": "{{ base_url }}{{ page.meta.logo }}"
+    {%- endif %}
+    {%- if page.meta and page.meta.sameAs %},
+  "sameAs": [
+    {%- for u in page.meta.sameAs %}"{{ u }}"{% if not loop.last %},{% endif %}{% endfor %}
+  ]
+    {%- endif %}
+    {%- if page.meta and page.meta.contact_email %},
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "email": "{{ page.meta.contact_email }}",
+    "contactType": "{{ page.meta.contact_type or 'customer service' }}"
+  }
+    {%- endif %}
+    {%- if config.site_author %},
+  "author": { "@type": "Organization", "name": "{{ config.site_author | e }}" }
+    {%- endif %}
+  {%- else %}
+    {%- if schema_type == "Event" and page.meta %}
+      {%- if page.meta.event_date %},
+  "startDate": "{{ page.meta.event_date }}"
+      {%- endif %}
+      {%- if page.meta.event_end %},
+  "endDate": "{{ page.meta.event_end }}"
+      {%- endif %}
+      {%- if page.meta.event_location %},
+  "location": { "@type": "Place", "name": "{{ page.meta.event_location | e }}" }
+      {%- endif %},
+  "organizer": { "@type": "Organization", "name": "{{ config.site_author | e or config.site_name | e }}" }
+    {%- elif schema_type in ["Article", "BlogPosting", "NewsArticle"] and page.meta %}
+      {%- if page.meta.date %},
+  "datePublished": "{{ page.meta.date }}"
+      {%- endif %}
+      {%- set _author = page.meta.author or page.meta["auteur·ice"] or config.site_author %}
+      {%- if _author %},
+  "author": { "@type": "Person", "name": "{{ _author | e }}" }
+      {%- endif %}
+      {%- if page_image and base_url %},
+  "image": "{{ base_url }}{{ page_image }}"
+      {%- endif %}
+    {%- else %},
+  "isPartOf": { "@type": "WebSite", "url": "{{ base_url }}", "name": "{{ config.site_name | e }}" }
+    {%- endif %}
+  {%- endif %}
 }
 </script>
+
+{# === BreadcrumbList pour sous-pages — aide Google à comprendre la hiérarchie ===
+   On utilise page.ancestors (variable native Zensical) pour avoir titres + URLs propres.
+   On filtre les ancestors sans URL (sections sans page d'index) avec selectattr,
+   sinon Schema.org BreadcrumbList rejette les positions non-consécutives.
+   On construit les URLs absolues via base_url + ancestor.url plutôt que le filter |url
+   qui produit du relatif (ex: ../../../).
+#}
+{% if not is_home and base_url and page_url %}
+{% if base_url[-1:] == "/" %}{% set _base_root = base_url[:-1] %}{% else %}{% set _base_root = base_url %}{% endif %}
+{% set _valid_ancestors = (page.ancestors or []) | selectattr("url") | list %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "{{ config.site_name | e }}",
+      "item": "{{ _base_root }}/"
+    }
+    {%- for ancestor in _valid_ancestors | reverse %},
+    {
+      "@type": "ListItem",
+      "position": {{ loop.index + 1 }},
+      "name": "{{ ancestor.title | e }}",
+      "item": "{{ _base_root }}/{{ ancestor.url }}"
+    }
+    {%- endfor %},
+    {
+      "@type": "ListItem",
+      "position": {{ (_valid_ancestors | length) + 2 }},
+      "name": "{{ page_title | e }}",
+      "item": "{{ page_url }}"
+    }
+  ]
+}
+</script>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -111,7 +219,7 @@
             {% if meta.tags %}
               <div class="home-tile__tags">
                 {% for tag in meta.tags %}
-                  <span class="home-tag">{{ tag }}</span>
+                  <span class="home-tag" aria-hidden="true">{{ tag }}</span>
                 {% endfor %}
               </div>
             {% endif %}
@@ -142,7 +250,7 @@
             {% if tile_meta.tags %}
               <div class="home-tile__tags">
                 {% for tag in tile_meta.tags %}
-                  <span class="home-tag">{{ tag }}</span>
+                  <span class="home-tag" aria-hidden="true">{{ tag }}</span>
                 {% endfor %}
               </div>
             {% endif %}
@@ -157,17 +265,25 @@
 </nav>
 
 {% if page.meta and page.meta.iframe %}
-<div class="iframe-embed">
-  <iframe {{ page.meta.iframe }} title="Contenu intégré"></iframe>
-</div>
+{% set _iframe_title = page.meta.iframe_title or "Contenu intégré" %}
+<section class="iframe-embed"{% if page.meta.iframe_title %} aria-labelledby="iframe-heading"{% else %} aria-label="{{ _iframe_title }}"{% endif %}>
+  {% if page.meta.iframe_title %}
+  <h2 id="iframe-heading" class="iframe-embed__title">{{ page.meta.iframe_title }}</h2>
+  {% endif %}
+  <iframe {{ page.meta.iframe }} title="{{ _iframe_title }}"></iframe>
+</section>
 {% endif %}
 
 {% else %}
 {{ super() }}
 {% if page.meta and page.meta.iframe %}
-<div class="iframe-embed">
-  <iframe {{ page.meta.iframe }} title="Contenu intégré"></iframe>
-</div>
+{% set _iframe_title = page.meta.iframe_title or "Contenu intégré" %}
+<section class="iframe-embed"{% if page.meta.iframe_title %} aria-labelledby="iframe-heading"{% else %} aria-label="{{ _iframe_title }}"{% endif %}>
+  {% if page.meta.iframe_title %}
+  <h2 id="iframe-heading" class="iframe-embed__title">{{ page.meta.iframe_title }}</h2>
+  {% endif %}
+  <iframe {{ page.meta.iframe }} title="{{ _iframe_title }}"></iframe>
+</section>
 {% endif %}
 {% endif %}
 {% endblock %}

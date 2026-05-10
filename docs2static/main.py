@@ -48,8 +48,16 @@ def setup_logger():
 # Initialisation du logger / Logger initialization
 logger = setup_logger()
 
-# Chargement des variables d'environnement / Loading environment variables
-load_dotenv()
+# IMPORTANT : on ne charge PAS .env au module-level.
+# Avec `uv run` ou en editable mode, le cwd à l'import peut être celui du
+# package source (ex: /home/jonas/Gits/docs2static) plutôt que celui de
+# l'utilisateur (ex: /home/jonas/Gits/mon-projet). load_dotenv() chargerait
+# alors le mauvais fichier. On le fait dans main() où le cwd est bon.
+#
+# IMPORTANT: do NOT load .env at module-level. With `uv run` or editable
+# mode, the cwd at import time may be the package source rather than the
+# user's working directory, leading to the wrong .env being loaded.
+# We load it inside main() where the cwd is correct.
 
 # Utilisation d'une session avec cache pour éviter de surcharger le serveur
 # On garde les résultats pendant 24 heures par défaut
@@ -711,6 +719,23 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
         logger.error(f"Erreur avec le document {doc_id} : {e}")
 
 def main():
+    # Chargement du .env DEPUIS le cwd de l'utilisateur.
+    # IMPORTANT : load_dotenv() sans arg utilise find_dotenv() qui par défaut
+    # part du fichier APPELANT (via inspect.stack), pas du cwd. En editable
+    # install, le fichier appelant est celui du package source — donc on
+    # chargerait le .env du repo docs2static au lieu de celui de l'utilisateur.
+    # On force usecwd=True via find_dotenv() pour partir du cwd.
+    #
+    # Load .env FROM the user's cwd.
+    # IMPORTANT: load_dotenv() without arg uses find_dotenv() which defaults
+    # to walking up from the CALLING file (via inspect.stack), not from cwd.
+    # In editable install, the calling file is the package source — we'd load
+    # the docs2static repo's .env instead of the user's. We force usecwd=True
+    # via find_dotenv() to start from the cwd.
+    from dotenv import find_dotenv
+    load_dotenv(find_dotenv(usecwd=True))
+
+
     """
     Fonction principale qui démarre le programme.
     Main function that starts the program.

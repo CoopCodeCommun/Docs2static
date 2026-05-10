@@ -5,6 +5,14 @@ import shutil
 import json
 import sys
 import re
+from dotenv import load_dotenv
+
+# Charge .env depuis le cwd des tests (docs2static repo) puisque le moteur
+# ne le fait plus au module-level (cf. docs2static/main.py).
+# Loads .env from tests cwd (docs2static repo) since the engine no longer
+# does so at module-level (see docs2static/main.py).
+load_dotenv()
+
 from docs2static import main
 from docs2static.main import logger
 
