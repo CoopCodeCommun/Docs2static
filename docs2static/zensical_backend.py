@@ -194,17 +194,34 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             language = metadata.get("langue") or metadata.get("language") or "fr"
             toml_content = re.sub(r'language\s*=\s*".*?"', f'language = "{language}"', toml_content)
 
-            # legal_url : exposé dans [extra] pour le footer
-            # legal_url: exposed in [extra] for the footer
+            # Auto-génération de la page Mentions légales
+            # Activée par défaut, désactivable via legal_auto: non dans le frontmatter racine.
+            # Si legal_url: est explicitement défini par l'utilisateur, on le respecte
+            # et on ne génère pas de page (l'utilisateur pointe ailleurs).
+            #
+            # Auto-generate the Mentions légales (Legal notice) page.
+            # Enabled by default, can be disabled via legal_auto: non in root frontmatter.
+            # If legal_url: is explicitly set by the user, we respect it and skip
+            # auto-generation (the user points elsewhere).
+            _legal_auto_raw = str(metadata.get("legal_auto", "oui")).lower()
+            _legal_auto_enabled = _legal_auto_raw not in ("non", "no", "false", "0", "off")
+            should_auto_generate_legal = _legal_auto_enabled and not metadata.get("legal_url")
+            if should_auto_generate_legal:
+                metadata["legal_url"] = "/mentions-legales/"
+
+            # legal_url : exposé dans [project.extra] pour le footer
+            # (Zensical mappe [project.extra] sur config.extra dans Jinja)
+            # legal_url: exposed in [project.extra] for the footer
+            # (Zensical maps [project.extra] to config.extra in Jinja)
             legal_url = metadata.get("legal_url")
             if legal_url:
-                if re.search(r'^\[extra\]', toml_content, re.MULTILINE):
+                if re.search(r'^\[project\.extra\]', toml_content, re.MULTILINE):
                     if re.search(r'^\s*legal_url\s*=', toml_content, re.MULTILINE):
                         toml_content = re.sub(r'^\s*legal_url\s*=\s*".*?"', f'legal_url = "{legal_url}"', toml_content, flags=re.MULTILINE)
                     else:
-                        toml_content = re.sub(r'(^\[extra\][^\[]*)', rf'\1legal_url = "{legal_url}"\n', toml_content, count=1, flags=re.MULTILINE)
+                        toml_content = re.sub(r'(^\[project\.extra\][^\[]*)', rf'\1legal_url = "{legal_url}"\n', toml_content, count=1, flags=re.MULTILINE)
                 else:
-                    toml_content += f'\n[extra]\nlegal_url = "{legal_url}"\n'
+                    toml_content += f'\n[project.extra]\nlegal_url = "{legal_url}"\n'
 
             # copyright
             license_val = metadata.get("licence") or metadata.get("license")
@@ -234,6 +251,27 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             # Add explicit navigation if tree is provided
             if tree:
                 nav_list = build_nav_structure(tree, base_docs_dir)
+
+                # Auto-génération du markdown Mentions légales SANS l'ajouter
+                # à la nav. La page est accessible via le lien du footer
+                # uniquement (URL directe `/mentions-legales/`). Zensical build
+                # quand même les pages présentes dans `docs_dir` même si elles
+                # ne sont pas listées dans `nav` (page "orpheline" tolérée).
+                #
+                # Auto-generate Legal notice markdown WITHOUT adding it to nav.
+                # The page is reachable through the footer link only (direct
+                # URL `/mentions-legales/`). Zensical still builds pages
+                # present in `docs_dir` even when not listed in `nav`
+                # (orphan page tolerated).
+                if should_auto_generate_legal:
+                    _generate_legal_notice(
+                        base_docs_dir,
+                        metadata,
+                        site_url,
+                        repo_for_url,
+                        root_docs_url,
+                    )
+
                 nav_toml = format_nav_to_toml(nav_list, base_docs_dir)
                 # Cherche le bloc nav existant (non commenté, en début de ligne)
                 # Find existing nav block (not commented, at start of line)
@@ -360,6 +398,158 @@ def setup_zensical_backend(base_dir: str, metadata: Dict[str, Any], title: str, 
             _generate_seo_files(base_dir, metadata, site_url)
     except Exception as e:
         logger.error(f"Erreur lors de la mise à jour de zensical.toml : {e}")
+
+def _inject_sitemap_entry(site_dir: str, site_url: str, page_path: str):
+    """
+    Injecte une URL dans sitemap.xml si elle n'y est pas deja.
+    Sert pour les pages "orphelines" (pas dans la nav explicite) qui doivent
+    quand meme etre indexees par les moteurs de recherche — typiquement les
+    Mentions legales (visibles seulement dans le footer, pas dans le menu).
+
+    Inject a URL into sitemap.xml if not already present.
+    Used for "orphan" pages (not in explicit nav) that must still be indexed
+    by search engines — typically the Legal notice page (visible only in the
+    footer, not in the menu).
+    """
+    if not site_url or not page_path:
+        return
+    sitemap_path = os.path.join(site_dir, "sitemap.xml")
+    if not os.path.exists(sitemap_path):
+        logger.warning(f"sitemap.xml introuvable, skip injection : {sitemap_path}")
+        return
+
+    full_url = site_url.rstrip("/") + "/" + page_path.lstrip("/")
+    if not full_url.endswith("/"):
+        full_url += "/"
+
+    with open(sitemap_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    if full_url in content:
+        return  # déjà présent
+
+    new_entry = f"      <url>\n        <loc>{full_url}</loc>\n      </url>\n"
+    if "</urlset>" in content:
+        content = content.replace("</urlset>", new_entry + "</urlset>")
+        with open(sitemap_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        logger.info(f"Sitemap : URL ajoutée → {full_url}")
+
+
+def _generate_legal_notice(
+    base_docs_dir: str,
+    metadata: Dict[str, Any],
+    site_url: str,
+    repo_url: str,
+    docs_url: str,
+):
+    """
+    Génère automatiquement la page Mentions légales conforme LCEN/RGPD,
+    avec la Coopérative Code Commun comme entité technique.
+    Le contenu est hardcodé : les sites Docs2Static publiés via cette
+    fabrique ont tous Code Commun comme dev/maintenance et reposent sur
+    la même stack (lasuite-docs + GitHub/GitLab Pages + iframes externes).
+    Les variables (éditeur, licence, hébergement, source) sont dérivées
+    du frontmatter racine et du .env.
+
+    Auto-generates the Legal notice page (LCEN/RGPD compliant), with
+    Coopérative Code Commun as the technical entity. The content is
+    hardcoded since all Docs2Static sites published through this factory
+    share the same stack. Variables (publisher, license, hosting, source)
+    are derived from root frontmatter and .env.
+    """
+    from urllib.parse import urlparse
+    import datetime
+
+    legal_dir = os.path.join(base_docs_dir, "mentions-legales")
+    os.makedirs(legal_dir, exist_ok=True)
+    legal_path = os.path.join(legal_dir, "index.md")
+
+    # Variables dérivées
+    site_name = metadata.get("title") or metadata.get("titre") or "ce site"
+    domain = urlparse(site_url).hostname or site_url or "ce site"
+    author = metadata.get("auteur·ice") or metadata.get("author") or "l'éditeur du site"
+    license_val = metadata.get("licence") or metadata.get("license") or "CC-BY-SA"
+    year = datetime.date.today().year
+
+    # Plateforme d'hébergement (déduite du repo)
+    repo_lower = (repo_url or "").lower()
+    if "gitlab.com" in repo_lower:
+        platform = "GitLab Pages"
+        platform_company = "GitLab Inc."
+    else:
+        platform = "GitHub Pages"
+        platform_company = "GitHub Inc. (Microsoft Corporation), 88 Colin P. Kelly Jr Street, San Francisco, CA 94107, États-Unis"
+
+    repo_clean = repo_url.rstrip("/") if repo_url else ""
+    docs_clean = docs_url.rstrip("/") if docs_url else ""
+
+    # Construction du markdown via yaml.safe_dump pour le frontmatter
+    import yaml
+    fm = {
+        "titre": "Mentions légales",
+        "description": f"Mentions légales du site {site_name}",
+        "brouillon": "non",
+        "noindex": "oui",
+        "order": 999,
+    }
+    fm_yaml = yaml.safe_dump(fm, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+    body = f"""# Mentions légales
+
+## Éditeur du site
+
+Le site **{domain}** est édité par **{author}**.
+
+## Conception et développement technique
+
+Site réalisé avec **[Docs2Static](https://github.com/CoopCodeCommun/Docs2static)**, un commun numérique développé par la **[Coopérative Code Commun](https://codecommun.coop)** (SCIC).
+
+- Site : [codecommun.coop](https://codecommun.coop)
+- Contact : [contact@codecommun.coop](mailto:contact@codecommun.coop)
+- Logiciel libre : [github.com/CoopCodeCommun/Docs2static](https://github.com/CoopCodeCommun/Docs2static)
+- Licence du moteur : Apache-2.0
+
+## Hébergement
+
+Le site est hébergé sur **{platform}**, fourni par {platform_company}.
+"""
+
+    if repo_clean:
+        body += f"\nCode source du site : [{repo_clean}]({repo_clean})\n"
+
+    body += "\n## Source des contenus\n"
+
+    if docs_clean:
+        body += (
+            f"\nLes contenus sont rédigés et tenus à jour collaborativement "
+            f"sur l'instance Docs : [{docs_clean}]({docs_clean})\n"
+        )
+    else:
+        body += "\nLes contenus sont rédigés sur une instance la-suite Docs.\n"
+
+    body += f"\nLicence par défaut des contenus : **{license_val}**.\n"
+
+    body += """
+## Données personnelles
+
+Ce site est statique : il n'utilise pas de cookies de suivi, ne collecte aucune donnée personnelle et n'embarque aucun script tiers de tracking.
+
+Les iframes embarquées (cartes, billetterie, formulaires externes, etc.) peuvent en revanche déposer des cookies relevant de leurs propres politiques de confidentialité.
+
+## Droit applicable
+
+Droit français — Article 6 de la Loi pour la Confiance dans l'Économie Numérique (LCEN).
+"""
+
+    body += f"\n---\n\n*Page générée automatiquement par Docs2Static — dernière mise à jour : {datetime.date.today().isoformat()}.*\n"
+    _ = year  # unused but kept for future use
+
+    with open(legal_path, "w", encoding="utf-8") as f:
+        f.write(f"---\n{fm_yaml}---\n\n{body}")
+
+    logger.info(f"Page Mentions légales générée : {legal_path}")
+
 
 def _generate_seo_files(base_dir: str, metadata: Dict[str, Any], site_url: str):
     """Génère robots.txt et humans.txt à la racine du projet Zensical."""
@@ -537,6 +727,12 @@ def deploy_zensical(base_dir: str, repo_url: str):
     # CNAME pour domaine custom GitHub/GitLab Pages
     # CNAME for custom GitHub/GitLab Pages domain
     _write_cname_if_custom_domain(site_dir)
+
+    # Injection de la page Mentions légales dans le sitemap.xml (orpheline)
+    # Inject the Legal notice page into sitemap.xml (orphan, not in nav)
+    site_url_env = os.getenv("SITE_URL", "").strip()
+    if site_url_env:
+        _inject_sitemap_entry(site_dir, site_url_env, "mentions-legales/")
 
     # 2. Déploiement
     site_dir = os.path.join(base_dir, "site")

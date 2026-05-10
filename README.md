@@ -88,6 +88,25 @@ docs2static -f html        # html, markdown ou both
 | `-b, --backend` | Moteur de site statique |
 | `-d, --deploy` | Deployer sans retelecharger |
 
+### Audit pré-build (skill Claude Code)
+
+Avant de lancer un build, vous pouvez auditer la qualité éditoriale de vos Docs source via le skill **`docs-content-curator`** (embarqué dans `.claude/skills/` du projet) :
+
+```bash
+make audit
+```
+
+Le skill lit vos Docs via le MCP [`lasuite-docs`](https://github.com/CoopCodeCommun/lasuite-docs-mcp) et vérifie :
+
+- **Frontmatter** : clés obligatoires (`titre`), recommandées (`résumé`, `auteur·ice`, `image`), orthographes
+- **Images** : `alt` text, format (WebP/AVIF), dimensions raisonnables
+- **SEO** : longueur title/description, unicité H1, canonical, Open Graph
+- **Données structurées** : Schema.org JSON-LD (`Organization`, `Event`, `Article`...), `BreadcrumbList`
+- **Mentions légales** : présence d'une page dédiée + `legal_url:` configuré
+- **FAQ** : suggestion de page `FAQPage` Schema.org
+
+Sortie : un rapport structuré (✅ / ⚠️ / ❌ / 💡) avec un score /100 et des patches optionnels appliqués via le MCP (avec confirmation explicite avant écriture). Pré-requis : la CLI [Claude Code](https://docs.claude.com/claude-code/quickstart) installée et le MCP `lasuite-docs` configuré.
+
 ## Metadonnees (frontmatter)
 
 Ajoutez un bloc frontmatter au debut de vos documents Docs :
