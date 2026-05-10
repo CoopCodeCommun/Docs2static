@@ -10,8 +10,15 @@ GITHUB_REPO=
 # GitLab repository for upload (alternative)
 # GITLAB_REPO=
 
-# URL du site déployé (optionnel, sinon dérivé de GITHUB_REPO/GITLAB_REPO)
-# Deployed site URL (optional, else derived from GITHUB_REPO/GITLAB_REPO)
+# URL du site déployé (optionnel, sinon dérivé de GITHUB_REPO/GITLAB_REPO).
+# Si SITE_URL pointe sur un domaine custom (ni *.github.io ni *.gitlab.io),
+# un fichier CNAME est généré automatiquement à chaque --deploy pour que
+# GitHub/GitLab Pages conserve le domaine custom après chaque force-push.
+#
+# Deployed site URL (optional, else derived from GITHUB_REPO/GITLAB_REPO).
+# If SITE_URL points to a custom domain (not *.github.io or *.gitlab.io),
+# a CNAME file is auto-generated on every --deploy so GitHub/GitLab Pages
+# keeps the custom domain after each force-push.
 # SITE_URL=https://mon-domaine.fr/
 
 # Moteur de site statique par défaut (ex: zensical)
