@@ -616,8 +616,12 @@ def process_document(base_url: str, doc_id: str, parent_output_dir: str = "conte
                 final_frontmatter["description"] = desc
 
         # Garantit un H1 dans le markdown pour éviter le fallback "Index" de Zensical
+        # On cherche un `# ` en DÉBUT DE LIGNE (multiline) — pas seulement en première ligne :
+        # un markdown qui commence par une image puis un H1 a déjà son H1, ne pas dupliquer.
         # Guarantees an H1 in markdown to avoid Zensical "Index" fallback
-        if clean_md and not re.match(r'^\s*#\s', clean_md.lstrip()):
+        # Search for `# ` at line start (multiline) — not only first line:
+        # a markdown starting with an image then an H1 already has its H1, don't duplicate.
+        if clean_md and not re.search(r'^#\s', clean_md, re.MULTILINE):
             clean_md = f"# {title}\n\n{clean_md}"
 
         # Reconstruit le bloc frontmatter en Markdown pour index.md
